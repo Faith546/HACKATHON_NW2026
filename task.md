@@ -1,0 +1,29 @@
+# Implementación Core Plane
+
+- [x] **Carriers Module**
+  - [x] Zod types
+  - [x] Repository (Drizzle)
+  - [x] Controller (API Error & AsyncHandler)
+  - [x] Routes montadas en `core.router.ts`
+  - [x] Integration Tests
+- [x] **Operations & Mandates (Mandate Engine)**
+  - [x] Zod types
+  - [x] Repository y transacciones
+  - [x] Controller
+  - [x] Tests
+- [x] **Campaigns & Negotiations**
+  - [x] Zod types
+  - [x] Repository y orquestación
+  - [x] Controller & Routes
+  - [x] Tests
+- [x] **Quotes (Market Engine)**
+  - [x] Zod types
+  - [x] Evaluate Logic
+  - [x] Controller & Routes
+  - [x] Tests
+- [x] **Commitments (Commitment Engine)**
+  - [x] Zod types
+  - [x] Commit Logic (Evidence check)
+  - [x] Controller & Routes
+  - [x] Tests
+- [x] Documentación (`docs/05-core-modules.md`)

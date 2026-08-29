@@ -34,6 +34,7 @@ export const errorHandler: ErrorRequestHandler = (
       "El cuerpo de la solicitud no contiene JSON válido.",
     );
   } else {
+    console.error("Internal Server Error:", error);
     apiError = new ApiError(
       500,
       "INTERNAL_ERROR",
