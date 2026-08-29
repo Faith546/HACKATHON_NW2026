@@ -4,7 +4,7 @@ import { ApiError } from "../../shared/http/api-error";
 
 export class NegotiationsController {
   async get(req: Request, res: Response) {
-    const { negotiationId } = req.params;
+    const negotiationId = req.params.negotiationId as string;
     const negotiation = await negotiationsRepository.getNegotiationById(negotiationId);
     
     if (!negotiation) {

@@ -18,19 +18,20 @@ export class MandatesRepository {
   }
 
   async createMandateVersion(operationId: string, input: CreateMandateVersionInput) {
-    return await db.transaction(async (tx) => {
+    return db.transaction((tx) => {
       // 1. Check operation exists
-      const [operation] = await tx.select().from(operations).where(eq(operations.id, operationId));
+      const operation = tx.select().from(operations).where(eq(operations.id, operationId)).get();
       if (!operation) {
         throw new ApiError(404, "RESOURCE_NOT_FOUND", "Operación no encontrada");
       }
 
       // 2. Find current active mandate
-      const [currentMandate] = await tx
+      const currentMandate = tx
         .select()
         .from(mandates)
         .where(and(eq(mandates.operationId, operationId), eq(mandates.status, "ACTIVE")))
-        .limit(1);
+        .limit(1)
+        .get();
 
       if (!currentMandate) {
         throw new ApiError(409, "INVALID_STATE", "No hay un mandato activo para esta operación");
@@ -40,12 +41,13 @@ export class MandatesRepository {
       const maxTotalPriceCents = Math.round(input.maxTotalPrice * 100);
 
       // 3. Mark current as superseded
-      await tx.update(mandates)
-        .set({ status: "SUPERSEDED", updatedAt: new Date().toISOString() })
-        .where(eq(mandates.id, currentMandate.id));
+      tx.update(mandates)
+        .set({ status: "SUPERSEDED" })
+        .where(eq(mandates.id, currentMandate.id))
+        .run();
 
       // 4. Create new version
-      const [newMandate] = await tx.insert(mandates).values({
+      const newMandate = tx.insert(mandates).values({
         operationId,
         version: nextVersion,
         status: "ACTIVE",
@@ -53,10 +55,10 @@ export class MandatesRepository {
         currency: input.currency,
         pickupDate: input.pickupDate,
         notes: input.notes,
-      }).returning();
+      }).returning().get();
 
       // 5. Audit event
-      await tx.insert(auditEvents).values({
+      tx.insert(auditEvents).values({
         id: `evt_${randomUUID()}`,
         operationId,
         mandateId: newMandate.id,
@@ -71,7 +73,7 @@ export class MandatesRepository {
           previousMaxTotalPriceCents: currentMandate.maxTotalPriceCents,
           newMaxTotalPriceCents: maxTotalPriceCents
         }),
-      });
+      }).run();
 
       return newMandate;
     });

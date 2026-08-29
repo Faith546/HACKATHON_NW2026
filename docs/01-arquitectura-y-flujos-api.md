@@ -191,7 +191,7 @@ Responsable de:
 - Conferencia para escalación humana.
 - SMS de recap.
 
-El canal de audio usa `wss://<host-publico>/ws/twilio-media`. OpenAPI documenta HTTP y no modela este WebSocket; por eso el canal aparece aquí y no como un path en `openapi.yaml`.
+El canal de audio usa `wss://<host-publico>/ws/twilio-media/{callId}`. El `callId` en la ruta permite construir la lista estructural de tools antes de conectar OpenAI. OpenAPI documenta HTTP y no modela este WebSocket; por eso el canal aparece aquí y no como un path en `openapi.yaml`.
 
 ### 5.9 SQLite
 
@@ -386,7 +386,7 @@ El backend devuelve agente, modo y tools permitidas. En modo `QUOTE` no incluye 
 Twilio se conecta a:
 
 ```text
-wss://<host-publico>/ws/twilio-media
+wss://<host-publico>/ws/twilio-media/{callId}
 ```
 
 El gateway convierte y reenvía audio hacia la conexión WebSocket de OpenAI Realtime. Esto no usa un endpoint REST del contrato.

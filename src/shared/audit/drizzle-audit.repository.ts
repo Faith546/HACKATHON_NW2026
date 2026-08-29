@@ -2,7 +2,7 @@ import { auditEvents } from "../../db/schema";
 import type { AuditEventRepository, AuditEventRecord } from "./audit-writer";
 
 // Since Persona B might want to pass a transaction, we accept a drizzle db instance or a transaction instance
-export class DrizzleAuditRepository implements AuditEventRepository {
+export class DrizzleAuditEventRepository implements AuditEventRepository {
   constructor(private readonly dbOrTx: any) {}
 
   async insert(event: AuditEventRecord): Promise<void> {
@@ -21,3 +21,5 @@ export class DrizzleAuditRepository implements AuditEventRepository {
     });
   }
 }
+
+export { DrizzleAuditEventRepository as DrizzleAuditRepository };

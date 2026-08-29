@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCoreRouter } from "./modules/core/core.router";
 import { createVoiceRouter } from "./modules/voice/voice.router";
+import type { CreateVoiceRouterOptions } from "./modules/voice/voice.router";
 import {
   errorHandler,
   notFoundHandler,
@@ -17,6 +18,7 @@ const openApiPath = path.join(projectRoot, "openapi.yaml");
 
 export interface CreateAppOptions {
   apiPrefix?: string;
+  voice?: CreateVoiceRouterOptions;
 }
 
 export function createApp(options: CreateAppOptions = {}): Express {
@@ -49,7 +51,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
   );
 
   app.use(apiPrefix, createCoreRouter());
-  app.use(apiPrefix, createVoiceRouter());
+  app.use(apiPrefix, createVoiceRouter(options.voice));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

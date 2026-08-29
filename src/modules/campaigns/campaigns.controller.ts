@@ -5,7 +5,7 @@ import { ApiError } from "../../shared/http/api-error";
 
 export class CampaignsController {
   async create(req: Request, res: Response) {
-    const { operationId } = req.params;
+    const operationId = req.params.operationId as string;
     
     const parsed = CreateCampaignSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -21,7 +21,7 @@ export class CampaignsController {
   }
 
   async get(req: Request, res: Response) {
-    const { campaignId } = req.params;
+    const campaignId = req.params.campaignId as string;
     const campaign = await campaignsRepository.getCampaignById(campaignId);
     
     if (!campaign) {

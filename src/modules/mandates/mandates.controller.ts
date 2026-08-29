@@ -5,7 +5,7 @@ import { ApiError } from "../../shared/http/api-error";
 
 export class MandatesController {
   async getActive(req: Request, res: Response) {
-    const { operationId } = req.params;
+    const operationId = req.params.operationId as string;
     const mandate = await mandatesRepository.getActiveMandate(operationId);
     
     if (!mandate) {
@@ -16,7 +16,7 @@ export class MandatesController {
   }
 
   async createVersion(req: Request, res: Response) {
-    const { operationId } = req.params;
+    const operationId = req.params.operationId as string;
     
     const parsed = CreateMandateVersionSchema.safeParse(req.body);
     if (!parsed.success) {

@@ -6,6 +6,7 @@ import { marketRepository } from "../market/market.repository";
 import { commitmentsRepository } from "../commitments/commitments.repository";
 import { randomUUID } from "node:crypto";
 import { ApiError } from "../../shared/http/api-error";
+import type { EvaluateQuoteInput, SaveQuoteInput } from "../market/market.types";
 
 export class IntegrationService {
   /**
@@ -87,12 +88,12 @@ export class IntegrationService {
   }
 
   // --- Proxy to Market Engine ---
-  async evaluateOffer(operationId: string, carrierId: string, amountCents: number, currency: string) {
-    return await marketRepository.evaluateQuote(operationId, carrierId, amountCents, currency);
+  async evaluateOffer(negotiationId: string, input: EvaluateQuoteInput) {
+    return await marketRepository.evaluateQuote(negotiationId, input);
   }
 
-  async recordQuote(negotiationId: string, input: any, actorId?: string) {
-    return await marketRepository.evaluateAndSaveQuote(negotiationId, input, actorId);
+  async recordQuote(negotiationId: string, input: SaveQuoteInput, actorId?: string) {
+    return await marketRepository.saveQuote(negotiationId, input, actorId);
   }
 
   // --- Proxy to Commitments Engine ---
@@ -119,15 +120,16 @@ export class IntegrationService {
 
   // --- Operations State Updates (For Voice/Runtime) ---
   async confirmPickup(operationId: string, actorId?: string) {
-    return await db.transaction(async (tx) => {
-      const [op] = await tx.update(operations)
+    return db.transaction((tx) => {
+      const op = tx.update(operations)
         .set({ status: "PICKED_UP", updatedAt: new Date().toISOString() })
         .where(eq(operations.id, operationId))
-        .returning();
+        .returning()
+        .get();
       
       if (!op) throw new ApiError(404, "NOT_FOUND", "Operación no encontrada");
 
-      await tx.insert(auditEvents).values({
+      tx.insert(auditEvents).values({
         id: `evt_${randomUUID()}`,
         operationId,
         eventType: "PICKUP_CONFIRMED",
@@ -136,22 +138,23 @@ export class IntegrationService {
         entityType: "OPERATION",
         entityId: operationId,
         payloadJson: JSON.stringify({}),
-      });
+      }).run();
 
       return op;
     });
   }
 
   async confirmDelivery(operationId: string, actorId?: string) {
-    return await db.transaction(async (tx) => {
-      const [op] = await tx.update(operations)
+    return db.transaction((tx) => {
+      const op = tx.update(operations)
         .set({ status: "DELIVERED", updatedAt: new Date().toISOString() })
         .where(eq(operations.id, operationId))
-        .returning();
+        .returning()
+        .get();
       
       if (!op) throw new ApiError(404, "NOT_FOUND", "Operación no encontrada");
 
-      await tx.insert(auditEvents).values({
+      tx.insert(auditEvents).values({
         id: `evt_${randomUUID()}`,
         operationId,
         eventType: "DELIVERY_CONFIRMED",
@@ -160,22 +163,23 @@ export class IntegrationService {
         entityType: "OPERATION",
         entityId: operationId,
         payloadJson: JSON.stringify({}),
-      });
+      }).run();
 
       return op;
     });
   }
 
   async evaluateIncidentChange(operationId: string, incidentDetails: Record<string, any>, actorId?: string) {
-    return await db.transaction(async (tx) => {
-      const [op] = await tx.update(operations)
+    return db.transaction((tx) => {
+      const op = tx.update(operations)
         .set({ status: "ESCALATED", updatedAt: new Date().toISOString() })
         .where(eq(operations.id, operationId))
-        .returning();
+        .returning()
+        .get();
       
       if (!op) throw new ApiError(404, "NOT_FOUND", "Operación no encontrada");
 
-      await tx.insert(auditEvents).values({
+      tx.insert(auditEvents).values({
         id: `evt_${randomUUID()}`,
         operationId,
         eventType: "INCIDENT_ESCALATED",
@@ -184,7 +188,7 @@ export class IntegrationService {
         entityType: "OPERATION",
         entityId: operationId,
         payloadJson: JSON.stringify(incidentDetails),
-      });
+      }).run();
 
       return op;
     });

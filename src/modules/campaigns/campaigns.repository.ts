@@ -7,9 +7,9 @@ import { randomUUID } from "node:crypto";
 
 export class CampaignsRepository {
   async createCampaign(operationId: string, input: CreateCampaignInput, actorId?: string) {
-    return await db.transaction(async (tx) => {
+    return db.transaction((tx) => {
       // 1. Verify operation exists and status
-      const [operation] = await tx.select().from(operations).where(eq(operations.id, operationId));
+      const operation = tx.select().from(operations).where(eq(operations.id, operationId)).get();
       if (!operation) {
         throw new ApiError(404, "RESOURCE_NOT_FOUND", "Operación no encontrada");
       }
@@ -19,21 +19,22 @@ export class CampaignsRepository {
       }
 
       // 2. Create campaign
-      const [campaign] = await tx.insert(campaigns).values({
+      const campaign = tx.insert(campaigns).values({
         operationId,
         requestedCarriers: input.requestedCarriers,
         maxParallelCalls: input.maxParallelCalls,
         strategy: input.strategy,
         status: "QUEUED",
-      }).returning();
+      }).returning().get();
 
       // 3. Select random active carriers
-      const selectedCarriers = await tx
+      const selectedCarriers = tx
         .select({ id: carriers.id })
         .from(carriers)
         .where(eq(carriers.active, true))
         .orderBy(sql`RANDOM()`)
-        .limit(input.requestedCarriers);
+        .limit(input.requestedCarriers)
+        .all();
 
       if (selectedCarriers.length === 0) {
         throw new ApiError(409, "NO_CARRIERS_AVAILABLE", "No hay transportistas activos disponibles");
@@ -42,22 +43,23 @@ export class CampaignsRepository {
       // 4. Create negotiations
       const insertedNegotiations = [];
       for (const carrier of selectedCarriers) {
-        const [negotiation] = await tx.insert(negotiations).values({
+        const negotiation = tx.insert(negotiations).values({
           operationId,
           campaignId: campaign.id,
           carrierId: carrier.id,
           status: "PENDING",
-        }).returning();
+        }).returning().get();
         insertedNegotiations.push(negotiation);
       }
 
       // 5. Update operation status to SOURCING
-      await tx.update(operations)
+      tx.update(operations)
         .set({ status: "SOURCING", updatedAt: new Date().toISOString() })
-        .where(eq(operations.id, operationId));
+        .where(eq(operations.id, operationId))
+        .run();
 
       // 6. Record Audit Event
-      await tx.insert(auditEvents).values({
+      tx.insert(auditEvents).values({
         id: `evt_${randomUUID()}`,
         operationId,
         eventType: "CAMPAIGN_QUEUED",
@@ -70,7 +72,7 @@ export class CampaignsRepository {
           requestedCarriers: input.requestedCarriers,
           foundCarriers: selectedCarriers.length 
         }),
-      });
+      }).run();
 
       return { campaign, negotiations: insertedNegotiations };
     });

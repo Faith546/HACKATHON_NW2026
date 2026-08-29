@@ -5,7 +5,7 @@ import { ApiError } from "../../shared/http/api-error";
 
 export class CommitmentsController {
   async create(req: Request, res: Response) {
-    const { operationId } = req.params;
+    const operationId = req.params.operationId as string;
     
     const parsed = CreateCommitmentSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -19,7 +19,7 @@ export class CommitmentsController {
   }
 
   async confirm(req: Request, res: Response) {
-    const { commitmentId } = req.params;
+    const commitmentId = req.params.commitmentId as string;
     
     const parsed = ConfirmCommitmentSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -33,7 +33,7 @@ export class CommitmentsController {
   }
 
   async get(req: Request, res: Response) {
-    const { commitmentId } = req.params;
+    const commitmentId = req.params.commitmentId as string;
     const commitment = await commitmentsRepository.getCommitment(commitmentId);
     
     if (!commitment) {

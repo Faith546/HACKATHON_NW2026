@@ -5,7 +5,7 @@ import { ApiError } from "../../shared/http/api-error";
 
 export class MarketController {
   async evaluate(req: Request, res: Response) {
-    const { negotiationId } = req.params;
+    const negotiationId = req.params.negotiationId as string;
     
     const parsed = EvaluateQuoteSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -17,7 +17,7 @@ export class MarketController {
   }
 
   async save(req: Request, res: Response) {
-    const { negotiationId } = req.params;
+    const negotiationId = req.params.negotiationId as string;
     
     const parsed = SaveQuoteSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -32,13 +32,13 @@ export class MarketController {
   }
 
   async getQuotes(req: Request, res: Response) {
-    const { operationId } = req.params;
+    const operationId = req.params.operationId as string;
     const quotes = await marketRepository.getQuotesByOperationId(operationId);
     res.status(200).json(quotes);
   }
 
   async selectQuote(req: Request, res: Response) {
-    const { operationId } = req.params;
+    const operationId = req.params.operationId as string;
     
     const parsed = SelectQuoteSchema.safeParse(req.body);
     if (!parsed.success) {

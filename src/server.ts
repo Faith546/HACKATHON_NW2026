@@ -1,10 +1,34 @@
+import "dotenv/config";
+import { createServer } from "node:http";
 import { createApp } from "./app";
+import { TwilioMediaBridge } from "./modules/realtime/twilio-media.bridge";
+import { createVoiceRuntime } from "./modules/voice/voice.runtime";
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "127.0.0.1";
-const app = createApp();
+const voiceRuntime = createVoiceRuntime();
+const app = createApp({ voice: { runtime: voiceRuntime } });
+const server = createServer(app);
 
-const server = app.listen(port, host, () => {
+if (
+  process.env.OPENAI_API_KEY &&
+  process.env.TWILIO_AUTH_TOKEN &&
+  process.env.PUBLIC_WSS_URL
+) {
+  new TwilioMediaBridge(
+    voiceRuntime.callsService,
+    voiceRuntime.realtimeService,
+    {
+      apiKey: process.env.OPENAI_API_KEY,
+      twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
+      publicWssUrl: process.env.PUBLIC_WSS_URL,
+      model: process.env.REALTIME_MODEL,
+      voice: process.env.REALTIME_VOICE,
+    },
+  ).attach(server);
+}
+
+server.listen(port, host, () => {
   process.stdout.write(`API: http://${host}:${port}/api/v1\n`);
   process.stdout.write(`Swagger UI: http://${host}:${port}/docs\n`);
   process.stdout.write(`OpenAPI YAML: http://${host}:${port}/openapi.yaml\n`);

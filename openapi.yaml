@@ -744,7 +744,7 @@ paths:
               schema:
                 type: string
               example: |
-                <Response><Connect><Stream url="wss://demo.example/ws/twilio-media" /></Connect></Response>
+                <Response><Connect><Stream url="wss://demo.example/ws/twilio-media/call_01JABC123" /></Connect></Response>
 
   /webhooks/twilio/status:
     post:

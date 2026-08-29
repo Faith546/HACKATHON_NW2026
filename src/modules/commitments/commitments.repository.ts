@@ -7,28 +7,29 @@ import { randomUUID } from "node:crypto";
 
 export class CommitmentsRepository {
   async createCommitment(operationId: string, input: CreateCommitmentInput, actorId?: string) {
-    return await db.transaction(async (tx) => {
+    return db.transaction((tx) => {
       // 1. Verify Quote
-      const [quote] = await tx.select().from(quotes).where(eq(quotes.id, input.quoteId));
+      const quote = tx.select().from(quotes).where(eq(quotes.id, input.quoteId)).get();
       if (!quote) throw new ApiError(404, "RESOURCE_NOT_FOUND", "Cotización no encontrada");
       if (quote.operationId !== operationId) throw new ApiError(400, "BAD_REQUEST", "La cotización no pertenece a la operación");
       if (!quote.valid) throw new ApiError(409, "INVALID_STATE", "La cotización es inválida");
 
       // 2. Check for existing active commitments for this operation
-      const existing = await tx.select().from(commitments)
+      const existing = tx.select().from(commitments)
         .where(
           and(
             eq(commitments.operationId, operationId),
             inArray(commitments.status, ['PROPOSED', 'VERBALLY_AGREED', 'MANDATE_VALIDATED', 'SUMMARY_PENDING', 'SUMMARY_SENT', 'VALID', 'IN_EXECUTION'])
           )
-        );
+        )
+        .all();
       
       if (existing.length > 0) {
         throw new ApiError(409, "CONFLICT", "Ya existe un compromiso activo para esta operación");
       }
 
       // 3. Create Commitment
-      const [commitment] = await tx.insert(commitments).values({
+      const commitment = tx.insert(commitments).values({
         operationId,
         quoteId: quote.id,
         carrierId: quote.carrierId,
@@ -38,10 +39,10 @@ export class CommitmentsRepository {
         pickupDate: quote.pickupDate,
         exactTerms: input.exactTerms,
         status: "PROPOSED",
-      }).returning();
+      }).returning().get();
 
       // 4. Audit
-      await tx.insert(auditEvents).values({
+      tx.insert(auditEvents).values({
         id: `evt_${randomUUID()}`,
         operationId,
         mandateId: quote.mandateId,
@@ -51,15 +52,15 @@ export class CommitmentsRepository {
         entityType: "COMMITMENT",
         entityId: commitment.id,
         payloadJson: JSON.stringify({ quoteId: quote.id, carrierId: quote.carrierId }),
-      });
+      }).run();
 
       return commitment;
     });
   }
 
   async confirmCommitment(commitmentId: string, input: ConfirmCommitmentInput, actorId?: string) {
-    return await db.transaction(async (tx) => {
-      const [commitment] = await tx.select().from(commitments).where(eq(commitments.id, commitmentId));
+    return db.transaction((tx) => {
+      const commitment = tx.select().from(commitments).where(eq(commitments.id, commitmentId)).get();
       if (!commitment) throw new ApiError(404, "RESOURCE_NOT_FOUND", "Compromiso no encontrado");
       if (commitment.status !== "PROPOSED") {
         throw new ApiError(409, "INVALID_STATE", `El compromiso no puede ser confirmado desde el estado ${commitment.status}`);
@@ -69,7 +70,7 @@ export class CommitmentsRepository {
         throw new ApiError(400, "BAD_REQUEST", "El inicio de la evidencia debe ser menor al fin");
       }
 
-      const [updated] = await tx.update(commitments).set({
+      const updated = tx.update(commitments).set({
         status: "VALID",
         verbalAgreementCallId: input.callId,
         confirmedBy: input.confirmedBy,
@@ -77,9 +78,9 @@ export class CommitmentsRepository {
         evidenceEndMs: input.evidenceEndMs,
         evidenceTranscriptExcerpt: input.evidenceTranscriptExcerpt,
         updatedAt: new Date().toISOString(),
-      }).where(eq(commitments.id, commitmentId)).returning();
+      }).where(eq(commitments.id, commitmentId)).returning().get();
 
-      await tx.insert(auditEvents).values({
+      tx.insert(auditEvents).values({
         id: `evt_${randomUUID()}`,
         operationId: commitment.operationId,
         mandateId: commitment.mandateId,
@@ -93,7 +94,7 @@ export class CommitmentsRepository {
           confirmedBy: input.confirmedBy,
           evidenceExcerpt: input.evidenceTranscriptExcerpt 
         }),
-      });
+      }).run();
 
       return updated;
     });

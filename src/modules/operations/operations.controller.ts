@@ -20,7 +20,7 @@ export class OperationsController {
   }
 
   async get(req: Request, res: Response) {
-    const { operationId } = req.params;
+    const operationId = req.params.operationId as string;
     const operation = await operationsRepository.findOperationById(operationId);
     
     if (!operation) {
