@@ -10,14 +10,14 @@ La fuente contractual de los endpoints es [`openapi.yaml`](../openapi.yaml). Si 
 
 La demo debe poder:
 
-- Crear una operación y un mandato.
+- Crear una operación junto con su mandato inicial.
 - Contactar al menos tres carriers mediante llamadas telefónicas reales.
-- Negociar precio y horario sin exceder el mandato.
+- Negociar precio y fecha sin exceder el mandato.
 - Guardar cotizaciones estructuradas.
 - Seleccionar una oferta válida de forma auditable.
 - Confirmar verbalmente un commitment.
 - Enviar un recap escrito.
-- Vincular el commitment con un intervalo de la grabación.
+- Vincular el commitment con un intervalo y fragmento del transcript.
 - Recibir una llamada con una incidencia.
 - Evaluar un cambio y escalar a un humano si queda fuera del mandato.
 - Confirmar pickup y delivery.
@@ -30,7 +30,7 @@ No se busca una arquitectura de producción. Se aceptan conscientemente:
 - Eventos internos con `EventEmitter`.
 - Pérdida de jobs pendientes cuando el proceso se reinicia.
 - Autenticación simulada o ausente.
-- URLs de grabación de Twilio en lugar de almacenamiento propio.
+- Solo transcript de la llamada; la aplicación no solicita ni almacena grabaciones.
 - Configuración manual de carriers y números telefónicos.
 
 Quedan fuera del MVP:
@@ -110,12 +110,11 @@ También contempla `NEEDS_RENEGOTIATION`, `ESCALATED`, `NEEDS_CARRIER` y `CANCEL
 
 Es código determinista. Evalúa:
 
-- Precio total, no solo tarifa base.
+- Precio total informado por el carrier.
 - Moneda.
-- Fecha y ventana horaria.
-- Cargos adicionales.
-- Tolerancia de retraso.
-- Cambios de fecha o ruta.
+- Fecha única autorizada.
+
+El mandato de la demo solo contiene `maxTotalPrice`, `currency`, `pickupDate` y `notes`. Las notas son contexto humano y no crean reglas deterministas adicionales.
 
 Los mandatos son inmutables. Una modificación crea una fila con una versión superior.
 
@@ -172,7 +171,7 @@ Mantiene la correlación:
 
 ```text
 callId ↔ operationId ↔ carrierId ↔ negotiationId
-       ↔ mandateVersion ↔ agent ↔ mode
+       ↔ mandateId ↔ agent ↔ mode
 ```
 
 El gateway selecciona una de dos configuraciones lógicas:
@@ -189,7 +188,6 @@ Responsable de:
 - Llamadas PSTN entrantes y salientes.
 - Media Stream de audio.
 - Estado de llamada.
-- Grabación.
 - Conferencia para escalación humana.
 - SMS de recap.
 
@@ -238,10 +236,9 @@ No hay autenticación real en el contrato de la demo. `OPENAI_API_KEY` y las cre
 
 | Área | Endpoint | Uso |
 |---|---|---|
-| Operación | `POST /api/v1/operations` | Crear operación. |
+| Operación | `POST /api/v1/operations` | Crear operación y mandato v1. |
 | Operación | `GET /api/v1/operations/{operationId}` | Consultar detalle. |
 | Operación | `GET /api/v1/operations/{operationId}/status` | Estado resumido. |
-| Mandato | `POST /api/v1/operations/{operationId}/mandates` | Crear v1. |
 | Mandato | `GET /api/v1/operations/{operationId}/mandate` | Leer versión activa. |
 | Mandato | `POST /api/v1/operations/{operationId}/mandates/versions` | Crear nueva versión. |
 | Carrier | `GET /api/v1/carriers` | Listar candidatos. |
@@ -249,7 +246,7 @@ No hay autenticación real en el contrato de la demo. `OPENAI_API_KEY` y las cre
 | Campaña | `POST /api/v1/operations/{operationId}/campaigns` | Encolar llamadas a tres carriers. |
 | Campaña | `GET /api/v1/operations/{operationId}/campaigns/{campaignId}` | Consultar progreso. |
 | Llamada | `POST /api/v1/operations/{operationId}/calls/outbound` | Encolar una llamada manual. |
-| Llamada | `GET /api/v1/calls/{callId}` | Consultar estado y grabación. |
+| Llamada | `GET /api/v1/calls/{callId}` | Consultar estado y transcript. |
 | Realtime | `POST /api/v1/realtime/sessions` | Crear contexto de sesión. |
 | Realtime | `DELETE /api/v1/realtime/sessions/{sessionId}` | Cerrar sesión. |
 | Negociación | `POST /api/v1/negotiations/{negotiationId}/offers/evaluate` | Evaluar oferta. |
@@ -258,7 +255,7 @@ No hay autenticación real en el contrato de la demo. `OPENAI_API_KEY` y las cre
 | Mercado | `POST /api/v1/operations/{operationId}/market/selection` | Seleccionar ganador. |
 | Commitment | `POST /api/v1/operations/{operationId}/commitments/authorize` | Autorizar cierre. |
 | Commitment | `POST /api/v1/commitments/{commitmentId}/verbal-agreement` | Acuerdo verbal. |
-| Commitment | `POST /api/v1/commitments/{commitmentId}/evidence` | Adjuntar timestamp de audio. |
+| Commitment | `POST /api/v1/commitments/{commitmentId}/evidence` | Adjuntar offsets y fragmento del transcript. |
 | Commitment | `POST /api/v1/commitments/{commitmentId}/summary` | Encolar recap escrito. |
 | Incidente | `POST /api/v1/operations/{operationId}/incidents` | Registrar incidencia. |
 | Incidente | `POST /api/v1/incidents/{incidentId}/evaluate-change` | Evaluar cambio. |
@@ -270,7 +267,6 @@ No hay autenticación real en el contrato de la demo. `OPENAI_API_KEY` y las cre
 | Auditoría | `GET /api/v1/operations/{operationId}/audit-events` | Consultar timeline. |
 | Twilio | `POST /webhooks/twilio/voice` | Llamada entrante. |
 | Twilio | `POST /webhooks/twilio/status` | Estado de llamada. |
-| Twilio | `POST /webhooks/twilio/recording` | Grabación disponible. |
 
 ## 8. Flujo 1: preparar la demo
 
@@ -305,23 +301,19 @@ máximo $9,000 MXN.
 
 Si existe Operations Agent, este interpreta la frase. Si no, el presentador llena el request desde Swagger.
 
-### Paso 2.2: crear la operación
+### Paso 2.2: crear la operación y el mandato v1
 
 ```http
 POST /api/v1/operations
 ```
 
-El backend inserta `operations`, establece `CREATED` y agrega `OPERATION_CREATED` a auditoría.
+El body contiene los datos de la operación y un objeto `mandate` con precio máximo, moneda, fecha única y notas. En una sola transacción el backend:
 
-### Paso 2.3: crear el mandato
+1. Inserta `operations` con estado `CREATED`.
+2. Inserta `mandates` versión `1` y estado `ACTIVE`.
+3. Agrega `OPERATION_CREATED` y `MANDATE_CREATED` a auditoría usando el nuevo `mandateId`.
 
-```http
-POST /api/v1/operations/{operationId}/mandates
-```
-
-El backend crea la versión `1` activa. La ventana, el precio máximo y las condiciones quedan estructurados; no se almacenan únicamente en texto libre.
-
-### Paso 2.4: verificar lo interpretado
+### Paso 2.3: verificar lo interpretado
 
 ```http
 GET /api/v1/operations/{operationId}/status
@@ -414,7 +406,7 @@ GET /api/v1/operations/{operationId}/mandate
 Ejemplo del carrier:
 
 ```text
-$8,500 de tarifa más $1,000 de maniobra, jueves a las 10:00.
+$8,500 MXN para recoger durante el jueves.
 ```
 
 ### Paso 4.3: evaluar la oferta
@@ -425,7 +417,7 @@ La tool del agente llama:
 POST /api/v1/negotiations/{negotiationId}/offers/evaluate
 ```
 
-El Mandate Engine calcula `totalPrice = basePrice + additionalCharges`. Devuelve `allowed`, código, razones y versión de mandato. GPT utiliza el resultado para aceptar provisionalmente o contraofertar, pero no puede alterar el resultado.
+El Mandate Engine compara `totalPrice`, `currency` y `pickupDate` contra el mandato vigente. Devuelve `allowed`, código, razones y el `mandateId` exacto usado. GPT utiliza el resultado para aceptar provisionalmente o contraofertar, pero no puede alterar el resultado.
 
 ### Paso 4.4: registrar la quote final
 
@@ -435,7 +427,7 @@ Cuando el carrier da su mejor oferta:
 POST /api/v1/negotiations/{negotiationId}/quotes
 ```
 
-La quote guarda precio, fecha, horario, condiciones, vigencia, llamada y versión del mandato. “Registrar quote” no equivale a reservar.
+La quote guarda precio total, moneda, fecha, notas, vigencia, llamada y una FK `mandateId` al mandato exacto usado. “Registrar quote” no equivale a reservar.
 
 ### Paso 4.5: finalizar llamada
 
@@ -443,7 +435,6 @@ Twilio reporta el fin mediante:
 
 ```http
 POST /webhooks/twilio/status
-POST /webhooks/twilio/recording
 ```
 
 El gateway cierra su contexto mediante el service interno o, para una prueba HTTP:
@@ -505,15 +496,17 @@ POST /api/v1/commitments/{commitmentId}/verbal-agreement
 
 El backend vuelve a validar el mandato y pasa por `VERBALLY_AGREED` y `MANDATE_VALIDATED`.
 
-### Paso 5.5: asociar evidencia
+### Paso 5.5: asociar evidencia del transcript
 
-Cuando está disponible la grabación:
+Cuando el gateway ya consolidó el transcript:
 
 ```http
 POST /api/v1/commitments/{commitmentId}/evidence
 ```
 
-Guarda `recordingUrl`, `startMs` y `endMs` de la confirmación. La demo puede calcular esos offsets contra `calls.started_at` usando los eventos del gateway.
+Guarda `callId`, `startMs`, `endMs` y `transcriptExcerpt` de la confirmación. No se guarda una grabación completa.
+
+Esta decisión reduce almacenamiento y complejidad, pero también reduce el cumplimiento estricto del reto: un transcript con offsets no permite reproducir el audio original. Si los jueces exigen evidencia audible, deberá conservarse al menos la grabación remota de Twilio o un clip corto de confirmación.
 
 ### Paso 5.6: enviar recap
 
@@ -566,6 +559,8 @@ Cuando el conductor informa una avería:
 ```http
 POST /api/v1/operations/{operationId}/incidents
 ```
+
+El campo `type` es una etiqueta libre y amplia, por ejemplo `GENERAL`. No existe un enum de averías, retrasos o cancelaciones y el backend no toma decisiones usando ese texto. La evaluación usa únicamente la descripción y el cambio propuesto.
 
 ### Paso 6.4: evaluar el cambio propuesto
 
@@ -647,17 +642,7 @@ commitment → FULFILLED
 
 ## 16. Flujo 9: post-call y auditoría
 
-### Paso 9.1: asociar grabación
-
-Twilio llama:
-
-```http
-POST /webhooks/twilio/recording
-```
-
-El backend guarda la URL y duración en `calls`.
-
-### Paso 9.2: guardar call brief
+### Paso 9.1: consolidar transcript y guardar call brief
 
 El analizador post-call opcional recibe transcript, eventos de tools y estado final. Después llama:
 
@@ -667,14 +652,16 @@ POST /api/v1/calls/{callId}/brief
 
 El brief puede resumir, pero no puede modificar mandato, quote, ganador o commitment.
 
-### Paso 9.3: consultar trazabilidad
+La tabla `calls` conserva el transcript como texto. No almacena URL, SID, duración ni contenido de grabación.
+
+### Paso 9.2: consultar trazabilidad
 
 ```http
 GET /api/v1/calls/{callId}
 GET /api/v1/operations/{operationId}/audit-events
 ```
 
-La presentación debe mostrar quote comparison, commitment, recap y timestamp del audio desde estas lecturas.
+La presentación debe mostrar quote comparison, commitment, recap y el fragmento temporal del transcript desde estas lecturas.
 
 ## 17. Tools expuestas a cada agente
 
@@ -682,9 +669,8 @@ La presentación debe mostrar quote comparison, commitment, recap y timestamp de
 
 | Tool lógica | Endpoint |
 |---|---|
-| `create_operation` | `POST /api/v1/operations` |
+| `create_operation` | `POST /api/v1/operations` (incluye mandato v1) |
 | `get_operation_status` | `GET /api/v1/operations/{operationId}/status` |
-| `create_mandate` | `POST /api/v1/operations/{operationId}/mandates` |
 | `update_mandate` | `POST /api/v1/operations/{operationId}/mandates/versions` |
 | `list_carriers` | `GET /api/v1/carriers` |
 | `start_campaign` | `POST /api/v1/operations/{operationId}/campaigns` |
@@ -719,7 +705,7 @@ El gateway no envía al Logistics Agent ninguna tool para crear o modificar mand
 | Intento de crear dos commitments activos | `409`. |
 | Commitment con quote expirada | `409`. |
 | Cambio fuera del mandato | `200` con `allowed=false`; después se escala. |
-| Repetición del mismo webhook de Twilio | Se procesa idempotentemente usando `CallSid` o `RecordingSid`. |
+| Repetición del mismo webhook de Twilio | Se procesa idempotentemente usando `CallSid`. |
 | Reinicio del proceso | Los jobs en memoria se pierden; los datos ya escritos en SQLite permanecen. |
 
 ## 19. Estructura sugerida del código futuro
@@ -763,7 +749,7 @@ La demo se considera completa cuando puede mostrar, en una sola operación:
 3. Tres resultados de negociación.
 4. Comparación de quotes.
 5. Un solo ganador autorizado.
-6. Acuerdo verbal y evidencia de audio.
+6. Acuerdo verbal y evidencia mediante fragmento temporal del transcript.
 7. Recap escrito aceptado por el proveedor.
 8. Commitment `VALID`.
 9. Llamada entrante con incidencia.

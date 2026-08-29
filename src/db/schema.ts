@@ -23,7 +23,6 @@ export const operations = sqliteTable("operations", {
   service: text("service").notNull().default("DRAYAGE"),
   status: text("status").notNull(), 
   selectedCarrierId: text("selected_carrier_id").references(() => carriers.id),
-  activeMandateVersion: integer("active_mandate_version"),
   notes: text("notes"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
@@ -109,7 +108,7 @@ export const quotes = sqliteTable("quotes", {
   conditionsJson: text("conditions_json").notNull().default("[]"),
   valid: integer("valid").notNull(),
   invalidReason: text("invalid_reason"),
-  mandateVersion: integer("mandate_version").notNull(),
+  mandateId: text("mandate_id").notNull().references(() => mandates.id),
   validUntil: text("valid_until").notNull(),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
@@ -120,7 +119,7 @@ export const commitments = sqliteTable("commitments", {
   quoteId: text("quote_id").notNull().references(() => quotes.id),
   carrierId: text("carrier_id").notNull().references(() => carriers.id),
   status: text("status").notNull(),
-  mandateVersion: integer("mandate_version").notNull(),
+  mandateId: text("mandate_id").notNull().references(() => mandates.id),
   totalPriceCents: integer("total_price_cents").notNull(),
   currency: text("currency").notNull().default("MXN"),
   pickupAt: text("pickup_at").notNull(),
@@ -149,7 +148,7 @@ export const incidents = sqliteTable("incidents", {
   status: text("status").notNull(),
   proposedChangeJson: text("proposed_change_json"),
   evaluationCode: text("evaluation_code"),
-  mandateVersion: integer("mandate_version"),
+  mandateId: text("mandate_id").references(() => mandates.id),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   resolvedAt: text("resolved_at"),
 });
@@ -177,7 +176,7 @@ export const auditEvents = sqliteTable("audit_events", {
   callId: text("call_id").references(() => calls.id),
   entityType: text("entity_type"),
   entityId: text("entity_id"),
-  mandateVersion: integer("mandate_version"),
+  mandateId: text("mandate_id").references(() => mandates.id),
   payloadJson: text("payload_json").notNull().default("{}"),
   occurredAt: text("occurred_at").notNull().$defaultFn(() => new Date().toISOString()),
 });

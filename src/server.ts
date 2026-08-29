@@ -98,7 +98,7 @@ app.post("/api/v1/operations/:operationId/campaigns", async (req, res) => {
 app.post("/api/v1/negotiations/:negotiationId/quotes", async (req, res) => {
   try {
     const { negotiationId } = req.params;
-    const { operationId, carrierId, offeredPriceCents, isValid } = req.body;
+    const { operationId, carrierId, offeredPriceCents, isValid, mandateId } = req.body;
 
     const [quote] = await db.insert(quotes).values({
       operationId,
@@ -108,7 +108,7 @@ app.post("/api/v1/negotiations/:negotiationId/quotes", async (req, res) => {
       totalPriceCents: offeredPriceCents,
       pickupDate: "2026-01-01",
       pickupTime: "12:00",
-      mandateVersion: 1,
+      mandateId,
       validUntil: new Date().toISOString(),
       valid: isValid ? 1 : 0
     }).returning();
@@ -126,7 +126,7 @@ app.post("/api/v1/negotiations/:negotiationId/quotes", async (req, res) => {
 app.post("/api/v1/operations/:operationId/commitments/authorize", async (req, res) => {
   try {
     const { operationId } = req.params;
-    const { quoteId, carrierId, agreedPriceCents } = req.body;
+    const { quoteId, carrierId, agreedPriceCents, mandateId } = req.body;
 
     const [commitment] = await db.insert(commitments).values({
       operationId,
@@ -134,7 +134,7 @@ app.post("/api/v1/operations/:operationId/commitments/authorize", async (req, re
       carrierId,
       totalPriceCents: agreedPriceCents,
       pickupAt: "2026-01-01T12:00:00Z",
-      mandateVersion: 1,
+      mandateId,
       status: "PROPOSED"
     }).returning();
 
@@ -147,13 +147,14 @@ app.post("/api/v1/operations/:operationId/commitments/authorize", async (req, re
 app.post("/api/v1/operations/:operationId/incidents", async (req, res) => {
   try {
     const { operationId } = req.params;
-    const { description } = req.body;
+    const { description, mandateId } = req.body;
 
     const [incident] = await db.insert(incidents).values({
       operationId,
       description,
       type: "OTHER",
-      status: "OPEN"
+      status: "OPEN",
+      mandateId
     }).returning();
 
     res.status(201).json(incident);
