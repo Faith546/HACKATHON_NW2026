@@ -32,46 +32,69 @@ app.get("/api/v1/health", (req, res) => {
 
 app.post("/api/v1/operations", async (req, res) => {
   try {
-    const { operatorId, customerName, containerNumber, origin, destination } = req.body;
-    const [operation] = await db.insert(operations).values({
-      customerName: customerName || "Unknown",
-      containerNumber: containerNumber || "Unknown",
-      origin: origin || "Unknown",
-      destination: destination || "Unknown",
-      status: "CREATED"
-    }).returning();
-    
-    await db.insert(auditEvents).values({
-      operationId: operation.id,
-      eventType: "OperationCreated",
-      actorType: "INTERNAL_OPERATOR",
-      details: { operatorId }
+    const {
+      operatorId,
+      customerName,
+      containerNumber,
+      origin,
+      destination,
+      service = "DRAYAGE",
+      notes,
+      mandate,
+    } = req.body;
+    const created = await db.transaction(async (tx) => {
+      const [operation] = await tx.insert(operations).values({
+        customerName: customerName || "Unknown",
+        containerNumber: containerNumber || "Unknown",
+        origin: origin || "Unknown",
+        destination: destination || "Unknown",
+        service,
+        notes,
+        status: "CREATED",
+      }).returning();
+
+      const [initialMandate] = await tx.insert(mandates).values({
+        operationId: operation.id,
+        version: 1,
+        status: "ACTIVE",
+        maxTotalPriceCents: Math.round(mandate.maxTotalPrice * 100),
+        currency: mandate.currency,
+        pickupDate: mandate.pickupDate,
+        notes: mandate.notes,
+      }).returning();
+
+      await tx.insert(auditEvents).values([
+        {
+          operationId: operation.id,
+          mandateId: initialMandate.id,
+          eventType: "OPERATION_CREATED",
+          actorType: "INTERNAL_OPERATOR",
+          actorId: operatorId,
+          entityType: "OPERATION",
+          entityId: operation.id,
+          payloadJson: JSON.stringify({ initialMandateId: initialMandate.id }),
+        },
+        {
+          operationId: operation.id,
+          mandateId: initialMandate.id,
+          eventType: "MANDATE_CREATED",
+          actorType: "INTERNAL_OPERATOR",
+          actorId: operatorId,
+          entityType: "MANDATE",
+          entityId: initialMandate.id,
+          payloadJson: JSON.stringify({ version: 1 }),
+        },
+      ]);
+
+      return { operation, initialMandate };
     });
 
-    res.status(201).json(operation);
+    res.status(201).json({
+      ...created.operation,
+      mandate: created.initialMandate,
+    });
   } catch (err) {
     res.status(500).json({ error: "Internal server error", details: err });
-  }
-});
-
-app.post("/api/v1/operations/:operationId/mandates", async (req, res) => {
-  try {
-    const { operationId } = req.params;
-    const { targetDate, maxPriceCents } = req.body;
-
-    const [mandate] = await db.insert(mandates).values({
-      operationId,
-      pickupDate: targetDate || "2026-01-01",
-      pickupStart: "00:00",
-      pickupEnd: "23:59",
-      maxTotalPriceCents: maxPriceCents || 900000,
-      version: 1,
-      status: "ACTIVE"
-    }).returning();
-
-    res.status(201).json(mandate);
-  } catch (err) {
-    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -98,19 +121,28 @@ app.post("/api/v1/operations/:operationId/campaigns", async (req, res) => {
 app.post("/api/v1/negotiations/:negotiationId/quotes", async (req, res) => {
   try {
     const { negotiationId } = req.params;
-    const { operationId, carrierId, offeredPriceCents, isValid, mandateId } = req.body;
+    const {
+      operationId,
+      carrierId,
+      totalPrice,
+      currency = "MXN",
+      pickupDate,
+      notes,
+      isValid,
+      mandateId,
+    } = req.body;
 
     const [quote] = await db.insert(quotes).values({
       operationId,
       negotiationId,
       carrierId,
-      basePriceCents: offeredPriceCents,
-      totalPriceCents: offeredPriceCents,
-      pickupDate: "2026-01-01",
-      pickupTime: "12:00",
+      totalPriceCents: Math.round(totalPrice * 100),
+      currency,
+      pickupDate,
+      notes,
       mandateId,
       validUntil: new Date().toISOString(),
-      valid: isValid ? 1 : 0
+      valid: Boolean(isValid),
     }).returning();
 
     res.status(201).json(quote);
@@ -126,16 +158,24 @@ app.post("/api/v1/negotiations/:negotiationId/quotes", async (req, res) => {
 app.post("/api/v1/operations/:operationId/commitments/authorize", async (req, res) => {
   try {
     const { operationId } = req.params;
-    const { quoteId, carrierId, agreedPriceCents, mandateId } = req.body;
+    const {
+      quoteId,
+      carrierId,
+      agreedPriceCents,
+      currency = "MXN",
+      pickupDate,
+      mandateId,
+    } = req.body;
 
     const [commitment] = await db.insert(commitments).values({
       operationId,
       quoteId,
       carrierId,
       totalPriceCents: agreedPriceCents,
-      pickupAt: "2026-01-01T12:00:00Z",
+      currency,
+      pickupDate,
       mandateId,
-      status: "PROPOSED"
+      status: "PROPOSED",
     }).returning();
 
     res.status(201).json(commitment);
@@ -147,12 +187,14 @@ app.post("/api/v1/operations/:operationId/commitments/authorize", async (req, re
 app.post("/api/v1/operations/:operationId/incidents", async (req, res) => {
   try {
     const { operationId } = req.params;
-    const { description, mandateId } = req.body;
+    const { callId, type = "GENERAL", description, reportedBy, mandateId } = req.body;
 
     const [incident] = await db.insert(incidents).values({
       operationId,
+      callId,
       description,
-      type: "OTHER",
+      reportedBy,
+      type,
       status: "OPEN",
       mandateId
     }).returning();
