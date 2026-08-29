@@ -1,0 +1,131 @@
+# ---------------------------------------------------------------------------
+# NextWave Voice Logistics — .gitignore
+# Node.js + Express (ESM) · SQLite · Twilio · OpenAI Realtime
+# ---------------------------------------------------------------------------
+
+# --- Dependencias ----------------------------------------------------------
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+jspm_packages/
+
+# package-lock.json SÍ se versiona: el jurado debe poder reproducir el build.
+
+# --- Secretos --------------------------------------------------------------
+# OPENAI_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, números, webhooks.
+# Nunca deben salir del servidor.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+
+# --- Base de datos SQLite (data/nextwave-demo.sqlite) ----------------------
+# Es la fuente de verdad operacional en runtime: se regenera con
+# migrate.js + seed.js. Los -wal/-shm son artefactos del modo WAL.
+data/
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite-wal
+*.sqlite-shm
+*.db-wal
+*.db-shm
+*.sqlite.bak
+*.sqlite.template
+
+# El esquema y los seeds sí se versionan (viven en src/database/).
+!src/database/migrations/
+!src/database/migrations/**
+!src/database/seed.js
+
+# --- Evidencia de llamadas -------------------------------------------------
+# Grabaciones, transcripciones y audio capturado del media stream.
+# Contienen voz de personas reales; en la demo viven como URLs de Twilio.
+recordings/
+audio/
+transcripts/
+storage/
+uploads/
+tmp/
+*.wav
+*.mp3
+*.ulaw
+*.raw
+*.pcm
+
+# --- Túnel público (Twilio necesita alcanzar el webhook) -------------------
+.ngrok/
+ngrok.yml
+ngrok.exe
+tunnel-url.txt
+.localtunnel/
+.cloudflared/
+
+# --- Logs y diagnóstico ----------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pid
+*.pid
+*.seed
+*.pid.lock
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# --- Build / caches --------------------------------------------------------
+dist/
+build/
+out/
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+.node_repl_history
+*.tsbuildinfo
+
+# --- Tests / cobertura -----------------------------------------------------
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+.vitest/
+
+# --- Editores e IDEs -------------------------------------------------------
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Sistema operativo -----------------------------------------------------
+# El equipo trabaja en Windows; macOS/Linux por si alguien clona.
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# --- Scratch / notas locales ----------------------------------------------
+scratch/
+.local/
+*.local
+TODO.local.md
