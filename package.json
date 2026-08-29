@@ -1,0 +1,20 @@
+{
+  "name": "nextwave-voice-logistics-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Swagger preview for the NextWave voice logistics demo API",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "validate:openapi": "swagger-cli validate openapi.yaml"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "js-yaml": "^4.1.0",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-cli": "^4.0.4"
+  }
+}

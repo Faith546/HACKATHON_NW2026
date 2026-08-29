@@ -1,0 +1,1709 @@
+openapi: 3.1.0
+info:
+  title: NextWave Voice Logistics Demo API
+  version: 0.1.0
+  summary: API para una demo de coordinación logística terrestre mediante agentes de voz.
+  description: |
+    Contrato HTTP del monolito Express para la demo NextWave Hackathon 2026.
+
+    La API mantiene las decisiones verificables en el backend: mandato, ofertas,
+    selección, commitments y estados. OpenAI Realtime controla la conversación y
+    utiliza estos endpoints como tools. Twilio entrega telefonía y webhooks.
+
+    Alcance deliberado de demo: SQLite, cola en memoria de Node.js, una sola
+    instancia, sin autenticación real y sin garantías de recuperación después de
+    reiniciar el proceso.
+  contact:
+    name: NextWave demo team
+servers:
+  - url: http://127.0.0.1:3000/api/v1
+    description: Servidor local de la demo
+tags:
+  - name: System
+  - name: Operations
+  - name: Mandates
+  - name: Carriers
+  - name: Campaigns
+  - name: Negotiations
+  - name: Market
+  - name: Calls
+  - name: Realtime
+  - name: Commitments
+  - name: Incidents
+  - name: Escalations
+  - name: Execution
+  - name: Audit
+  - name: Webhooks
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Verificar que el proceso Express está activo
+      responses:
+        "200":
+          description: Servicio activo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /operations:
+    post:
+      tags: [Operations]
+      operationId: createOperation
+      summary: Crear una operación de drayage
+      description: Lo llama el Operations Agent o la interfaz de demo después de interpretar la solicitud del operador.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOperationRequest"
+      responses:
+        "201":
+          description: Operación creada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    get:
+      tags: [Operations]
+      operationId: listOperations
+      summary: Listar operaciones de la demo
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/OperationStatus"
+      responses:
+        "200":
+          description: Lista de operaciones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Operation"
+
+  /operations/{operationId}:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    get:
+      tags: [Operations]
+      operationId: getOperation
+      summary: Consultar una operación completa
+      responses:
+        "200":
+          description: Operación encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /operations/{operationId}/status:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    get:
+      tags: [Operations]
+      operationId: getOperationStatus
+      summary: Obtener el estado resumido de una operación
+      responses:
+        "200":
+          description: Estado y entidades activas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationStatusView"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /operations/{operationId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Operations]
+      operationId: cancelOperation
+      summary: Cancelar una operación de demo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Operación cancelada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operations/{operationId}/mandates:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Mandates]
+      operationId: createMandate
+      summary: Crear la primera versión del mandato
+      description: Solo corresponde al lado interno. En la demo no hay autenticación real.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMandateRequest"
+      responses:
+        "201":
+          description: Mandato v1 creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Mandate"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operations/{operationId}/mandate:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    get:
+      tags: [Mandates]
+      operationId: getActiveMandate
+      summary: Consultar el mandato vigente
+      description: Tool de solo lectura disponible para el Logistics Agent.
+      responses:
+        "200":
+          description: Mandato activo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Mandate"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /operations/{operationId}/mandates/versions:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Mandates]
+      operationId: createMandateVersion
+      summary: Crear una nueva versión inmutable del mandato
+      description: El Logistics Agent nunca recibe esta tool.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMandateVersionRequest"
+      responses:
+        "201":
+          description: Nueva versión activa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Mandate"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /carriers:
+    get:
+      tags: [Carriers]
+      operationId: listCarriers
+      summary: Listar carriers disponibles para la campaña
+      responses:
+        "200":
+          description: Carriers de la demo
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Carrier"
+    post:
+      tags: [Carriers]
+      operationId: createCarrier
+      summary: Crear un carrier ficticio o de prueba
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCarrierRequest"
+      responses:
+        "201":
+          description: Carrier creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carrier"
+
+  /operations/{operationId}/campaigns:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Campaigns]
+      operationId: startCampaign
+      summary: Iniciar una campaña con al menos tres carriers
+      description: Crea negociaciones y agrega llamadas salientes a la cola en memoria de Node.js.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartCampaignRequest"
+      responses:
+        "202":
+          description: Campaña aceptada y llamadas encoladas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operations/{operationId}/campaigns/{campaignId}:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+      - $ref: "#/components/parameters/CampaignId"
+    get:
+      tags: [Campaigns]
+      operationId: getCampaign
+      summary: Consultar progreso de llamadas y cotizaciones
+      responses:
+        "200":
+          description: Estado de campaña
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /operations/{operationId}/calls/outbound:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Calls]
+      operationId: enqueueOutboundCall
+      summary: Encolar una llamada saliente individual
+      description: Endpoint de prueba/manual. La campaña normalmente llama al mismo servicio de forma interna.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnqueueCallRequest"
+      responses:
+        "202":
+          description: Llamada encolada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+
+  /calls/{callId}:
+    parameters:
+      - $ref: "#/components/parameters/CallId"
+    get:
+      tags: [Calls]
+      operationId: getCall
+      summary: Consultar llamada, transcript y grabación
+      responses:
+        "200":
+          description: Llamada encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Call"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /calls/{callId}/brief:
+    parameters:
+      - $ref: "#/components/parameters/CallId"
+    post:
+      tags: [Calls]
+      operationId: saveCallBrief
+      summary: Guardar el brief estructurado generado al finalizar una llamada
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveCallBriefRequest"
+      responses:
+        "200":
+          description: Brief almacenado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallBrief"
+
+  /realtime/sessions:
+    post:
+      tags: [Realtime]
+      operationId: createRealtimeSession
+      summary: Crear el contexto de una sesión de voz
+      description: Endpoint interno y de prueba para resolver agente, modo, contexto y tools permitidas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRealtimeSessionRequest"
+      responses:
+        "201":
+          description: Contexto de sesión creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RealtimeSession"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /realtime/sessions/{sessionId}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    delete:
+      tags: [Realtime]
+      operationId: closeRealtimeSession
+      summary: Cerrar y limpiar una sesión Realtime
+      responses:
+        "204":
+          description: Sesión cerrada
+
+  /negotiations/{negotiationId}:
+    parameters:
+      - $ref: "#/components/parameters/NegotiationId"
+    get:
+      tags: [Negotiations]
+      operationId: getNegotiation
+      summary: Consultar historial de una negociación
+      responses:
+        "200":
+          description: Negociación encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Negotiation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /negotiations/{negotiationId}/offers/evaluate:
+    parameters:
+      - $ref: "#/components/parameters/NegotiationId"
+    post:
+      tags: [Negotiations]
+      operationId: evaluateOffer
+      summary: Evaluar una oferta contra el mandato vigente
+      description: Tool determinista utilizada durante la conversación con el carrier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateOfferRequest"
+      responses:
+        "200":
+          description: Resultado de la evaluación
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationResult"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /negotiations/{negotiationId}/quotes:
+    parameters:
+      - $ref: "#/components/parameters/NegotiationId"
+    post:
+      tags: [Negotiations]
+      operationId: recordQuote
+      summary: Registrar la cotización final de un carrier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordQuoteRequest"
+      responses:
+        "201":
+          description: Cotización registrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /operations/{operationId}/quotes:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    get:
+      tags: [Market]
+      operationId: listOperationQuotes
+      summary: Obtener la comparación auditable de cotizaciones
+      responses:
+        "200":
+          description: Cotizaciones válidas e inválidas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Quote"
+
+  /operations/{operationId}/market/selection:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Market]
+      operationId: selectMarketWinner
+      summary: Seleccionar deterministicamente la mejor cotización válida
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SelectWinnerRequest"
+      responses:
+        "200":
+          description: Ganador seleccionado y explicación
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketSelection"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operations/{operationId}/commitments/authorize:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Commitments]
+      operationId: authorizeCommitment
+      summary: Autorizar exclusivamente al ganador para cerrar
+      description: Crea el commitment PROPOSED y evita un segundo commitment activo mediante transacción SQLite.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorizeCommitmentRequest"
+      responses:
+        "201":
+          description: Commitment autorizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Commitment"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operations/{operationId}/commitments:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    get:
+      tags: [Commitments]
+      operationId: listCommitments
+      summary: Listar commitments de una operación
+      responses:
+        "200":
+          description: Historial de commitments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Commitment"
+
+  /commitments/{commitmentId}/verbal-agreement:
+    parameters:
+      - $ref: "#/components/parameters/CommitmentId"
+    post:
+      tags: [Commitments]
+      operationId: recordVerbalAgreement
+      summary: Registrar la confirmación verbal inequívoca
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerbalAgreementRequest"
+      responses:
+        "200":
+          description: Acuerdo verbal registrado y mandato revalidado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Commitment"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /commitments/{commitmentId}/evidence:
+    parameters:
+      - $ref: "#/components/parameters/CommitmentId"
+    post:
+      tags: [Commitments]
+      operationId: attachCommitmentEvidence
+      summary: Vincular el commitment al segmento exacto del audio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachEvidenceRequest"
+      responses:
+        "200":
+          description: Evidencia vinculada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Commitment"
+
+  /commitments/{commitmentId}/summary:
+    parameters:
+      - $ref: "#/components/parameters/CommitmentId"
+    post:
+      tags: [Commitments]
+      operationId: enqueueCommitmentSummary
+      summary: Enviar el recap escrito y finalizar el commitment
+      description: Agrega un job a la cola en memoria. El commitment solo pasa a VALID cuando el proveedor acepta el envío.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendSummaryRequest"
+      responses:
+        "202":
+          description: Resumen encolado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Commitment"
+
+  /operations/{operationId}/incidents:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Incidents]
+      operationId: reportIncident
+      summary: Registrar una incidencia reportada por teléfono
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportIncidentRequest"
+      responses:
+        "201":
+          description: Incidencia registrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+
+  /incidents/{incidentId}/evaluate-change:
+    parameters:
+      - $ref: "#/components/parameters/IncidentId"
+    post:
+      tags: [Incidents]
+      operationId: evaluateIncidentChange
+      summary: Evaluar un cambio operativo contra el mandato
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateChangeRequest"
+      responses:
+        "200":
+          description: Cambio permitido o fuera del mandato
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationResult"
+
+  /operations/{operationId}/escalations:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Escalations]
+      operationId: requestEscalation
+      summary: Solicitar que un humano se una a la llamada activa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestEscalationRequest"
+      responses:
+        "201":
+          description: Escalación creada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Escalation"
+
+  /escalations/{escalationId}/join-human:
+    parameters:
+      - $ref: "#/components/parameters/EscalationId"
+    post:
+      tags: [Escalations]
+      operationId: joinHumanToCall
+      summary: Agregar un número humano a la conferencia activa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [humanPhone]
+              properties:
+                humanPhone:
+                  type: string
+                  example: "+525555555555"
+      responses:
+        "202":
+          description: Llamada al humano encolada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Escalation"
+
+  /operations/{operationId}/pickup/confirm:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Execution]
+      operationId: confirmPickup
+      summary: Confirmar pickup y pasar la operación a tránsito
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmExecutionEventRequest"
+      responses:
+        "200":
+          description: Pickup confirmado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operations/{operationId}/delivery/confirm:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    post:
+      tags: [Execution]
+      operationId: confirmDelivery
+      summary: Confirmar entrega y completar la operación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmExecutionEventRequest"
+      responses:
+        "200":
+          description: Entrega confirmada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /operations/{operationId}/audit-events:
+    parameters:
+      - $ref: "#/components/parameters/OperationId"
+    get:
+      tags: [Audit]
+      operationId: listAuditEvents
+      summary: Consultar la línea de tiempo auditable de la operación
+      responses:
+        "200":
+          description: Eventos ordenados cronológicamente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEvent"
+
+  /webhooks/twilio/voice:
+    post:
+      tags: [Webhooks]
+      operationId: receiveTwilioVoiceCall
+      summary: Recibir una llamada entrante de Twilio
+      description: Twilio usa form-urlencoded. El backend crea la llamada y devuelve TwiML para conectar el stream o conferencia.
+      servers:
+        - url: http://127.0.0.1:3000
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/TwilioVoiceWebhook"
+      responses:
+        "200":
+          description: Instrucciones TwiML
+          content:
+            application/xml:
+              schema:
+                type: string
+              example: |
+                <Response><Connect><Stream url="wss://demo.example/ws/twilio-media" /></Connect></Response>
+
+  /webhooks/twilio/status:
+    post:
+      tags: [Webhooks]
+      operationId: receiveTwilioCallStatus
+      summary: Actualizar el lifecycle de una llamada
+      servers:
+        - url: http://127.0.0.1:3000
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/TwilioStatusWebhook"
+      responses:
+        "204":
+          description: Estado procesado
+
+  /webhooks/twilio/recording:
+    post:
+      tags: [Webhooks]
+      operationId: receiveTwilioRecording
+      summary: Asociar la grabación terminada con la llamada
+      servers:
+        - url: http://127.0.0.1:3000
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/TwilioRecordingWebhook"
+      responses:
+        "204":
+          description: Grabación asociada
+
+components:
+  parameters:
+    OperationId:
+      name: operationId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: op_01JABC123
+    CampaignId:
+      name: campaignId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: cmp_01JABC123
+    CallId:
+      name: callId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: call_01JABC123
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: rts_01JABC123
+    NegotiationId:
+      name: negotiationId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: neg_01JABC123
+    CommitmentId:
+      name: commitmentId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: com_01JABC123
+    IncidentId:
+      name: incidentId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: inc_01JABC123
+    EscalationId:
+      name: escalationId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: esc_01JABC123
+
+  responses:
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: La acción no es compatible con el estado actual
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: Datos incompletos o inválidos
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Health:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          const: ok
+        service:
+          type: string
+          example: nextwave-voice-logistics-api
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: INVALID_STATE_TRANSITION
+        message:
+          type: string
+          example: La operación no puede pasar de CREATED a IN_TRANSIT.
+        details:
+          type: object
+          additionalProperties: true
+
+    OperationStatus:
+      type: string
+      enum:
+        - CREATED
+        - SOURCING
+        - BOOKED
+        - PICKUP_PENDING
+        - PICKED_UP
+        - IN_TRANSIT
+        - DELIVERED
+        - COMPLETED
+        - NEEDS_RENEGOTIATION
+        - ESCALATED
+        - NEEDS_CARRIER
+        - CANCELLED
+
+    CreateOperationRequest:
+      type: object
+      required: [customerName, containerNumber, origin, destination, service]
+      properties:
+        customerName:
+          type: string
+          example: Textiles Pacífico
+        containerNumber:
+          type: string
+          example: TCLU1234567
+        origin:
+          type: string
+          example: Puerto de Manzanillo
+        destination:
+          type: string
+          example: Guadalajara
+        service:
+          type: string
+          enum: [DRAYAGE]
+        notes:
+          type: string
+
+    Operation:
+      allOf:
+        - $ref: "#/components/schemas/CreateOperationRequest"
+        - type: object
+          required: [id, status, createdAt, updatedAt]
+          properties:
+            id:
+              type: string
+              example: op_01JABC123
+            status:
+              $ref: "#/components/schemas/OperationStatus"
+            selectedCarrierId:
+              type: [string, "null"]
+              example: car_atlas
+            activeMandateVersion:
+              type: [integer, "null"]
+              example: 1
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    OperationStatusView:
+      type: object
+      required: [operation, activeCalls, quoteCount]
+      properties:
+        operation:
+          $ref: "#/components/schemas/Operation"
+        activeMandate:
+          oneOf:
+            - $ref: "#/components/schemas/Mandate"
+            - type: "null"
+        activeCampaign:
+          oneOf:
+            - $ref: "#/components/schemas/Campaign"
+            - type: "null"
+        activeCommitment:
+          oneOf:
+            - $ref: "#/components/schemas/Commitment"
+            - type: "null"
+        activeCalls:
+          type: integer
+          minimum: 0
+        quoteCount:
+          type: integer
+          minimum: 0
+
+    CreateMandateRequest:
+      type: object
+      required: [maxTotalPrice, currency, pickupDate, pickupStart, pickupEnd]
+      properties:
+        maxTotalPrice:
+          type: number
+          exclusiveMinimum: 0
+          example: 9000
+        currency:
+          type: string
+          example: MXN
+        pickupDate:
+          type: string
+          format: date
+          example: 2026-09-03
+        pickupStart:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          example: "08:00"
+        pickupEnd:
+          type: string
+          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+          example: "12:00"
+        additionalChargesAllowed:
+          type: boolean
+          default: false
+        maxDelayMinutes:
+          type: integer
+          minimum: 0
+          default: 120
+        dateChangeAllowed:
+          type: boolean
+          default: false
+        routeChangeAllowed:
+          type: boolean
+          default: false
+        notes:
+          type: string
+
+    CreateMandateVersionRequest:
+      allOf:
+        - $ref: "#/components/schemas/CreateMandateRequest"
+        - type: object
+          required: [changeReason]
+          properties:
+            changeReason:
+              type: string
+              example: El operador autorizó también pickup el viernes durante la escalación.
+
+    Mandate:
+      allOf:
+        - $ref: "#/components/schemas/CreateMandateRequest"
+        - type: object
+          required: [id, operationId, version, status, createdAt]
+          properties:
+            id:
+              type: string
+              example: man_01JABC123
+            operationId:
+              type: string
+              example: op_01JABC123
+            version:
+              type: integer
+              minimum: 1
+            status:
+              type: string
+              enum: [ACTIVE, SUPERSEDED]
+            changeReason:
+              type: [string, "null"]
+            createdAt:
+              type: string
+              format: date-time
+
+    CreateCarrierRequest:
+      type: object
+      required: [name, dispatcherName, phone]
+      properties:
+        name:
+          type: string
+          example: Transportes Atlas
+        dispatcherName:
+          type: string
+          example: Laura
+        phone:
+          type: string
+          example: "+525555555501"
+        email:
+          type: string
+          format: email
+          example: operaciones@atlas.example
+        score:
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 80
+
+    Carrier:
+      allOf:
+        - $ref: "#/components/schemas/CreateCarrierRequest"
+        - type: object
+          required: [id, active]
+          properties:
+            id:
+              type: string
+              example: car_atlas
+            active:
+              type: boolean
+              default: true
+
+    StartCampaignRequest:
+      type: object
+      required: [carrierIds]
+      properties:
+        carrierIds:
+          type: array
+          minItems: 3
+          uniqueItems: true
+          items:
+            type: string
+          example: [car_atlas, car_norte, car_pacifico]
+        maxParallelCalls:
+          type: integer
+          minimum: 1
+          maximum: 3
+          default: 3
+
+    Campaign:
+      type: object
+      required: [id, operationId, status, requestedCarriers, completedNegotiations, quoteCount, createdAt]
+      properties:
+        id:
+          type: string
+          example: cmp_01JABC123
+        operationId:
+          type: string
+          example: op_01JABC123
+        status:
+          type: string
+          enum: [QUEUED, CALLING, COLLECTING_QUOTES, READY_TO_SELECT, COMPLETED, FAILED]
+        requestedCarriers:
+          type: integer
+          example: 3
+        completedNegotiations:
+          type: integer
+          example: 2
+        quoteCount:
+          type: integer
+          example: 2
+        createdAt:
+          type: string
+          format: date-time
+
+    EnqueueCallRequest:
+      type: object
+      required: [carrierId, purpose]
+      properties:
+        carrierId:
+          type: string
+          example: car_atlas
+        negotiationId:
+          type: [string, "null"]
+          example: neg_01JABC123
+        purpose:
+          type: string
+          enum: [QUOTE, COMMIT, RENEGOTIATION, FOLLOW_UP, ESCALATION]
+
+    Call:
+      type: object
+      required: [id, operationId, direction, status, purpose, createdAt]
+      properties:
+        id:
+          type: string
+          example: call_01JABC123
+        operationId:
+          type: string
+          example: op_01JABC123
+        carrierId:
+          type: [string, "null"]
+          example: car_atlas
+        negotiationId:
+          type: [string, "null"]
+        twilioCallSid:
+          type: [string, "null"]
+          example: CA1234567890
+        direction:
+          type: string
+          enum: [INBOUND, OUTBOUND]
+        purpose:
+          type: string
+          enum: [OPERATIONS, QUOTE, COMMIT, EXECUTION, INCIDENT, DELIVERY, RENEGOTIATION, ESCALATION]
+        status:
+          type: string
+          enum: [QUEUED, RINGING, IN_PROGRESS, COMPLETED, BUSY, NO_ANSWER, FAILED]
+        recordingUrl:
+          type: [string, "null"]
+          format: uri
+        transcript:
+          type: [string, "null"]
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        endedAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    SaveCallBriefRequest:
+      type: object
+      required: [summary, outcome, mentions, actions]
+      properties:
+        summary:
+          type: string
+        outcome:
+          type: string
+          enum: [QUOTE_OBTAINED, REFUSED, NO_AGREEMENT, COMMITTED, INCIDENT_REPORTED, ESCALATED, COMPLETED]
+        mentions:
+          type: array
+          items:
+            type: string
+        objections:
+          type: array
+          items:
+            type: string
+        actions:
+          type: array
+          items:
+            type: string
+        nextSteps:
+          type: array
+          items:
+            type: string
+
+    CallBrief:
+      allOf:
+        - $ref: "#/components/schemas/SaveCallBriefRequest"
+        - type: object
+          required: [callId, generatedAt]
+          properties:
+            callId:
+              type: string
+            generatedAt:
+              type: string
+              format: date-time
+
+    CreateRealtimeSessionRequest:
+      type: object
+      required: [callId, actorType, mode]
+      properties:
+        callId:
+          type: string
+        actorType:
+          type: string
+          enum: [INTERNAL_OPERATOR, CARRIER, DISPATCHER, DRIVER]
+        carrierId:
+          type: [string, "null"]
+        operationId:
+          type: [string, "null"]
+        negotiationId:
+          type: [string, "null"]
+        mode:
+          type: string
+          enum: [CREATE_OPERATION, QUOTE, COMMIT, EXECUTION, INCIDENT, DELIVERY]
+
+    RealtimeSession:
+      type: object
+      required: [id, callId, agent, mode, allowedTools, status]
+      properties:
+        id:
+          type: string
+          example: rts_01JABC123
+        callId:
+          type: string
+        agent:
+          type: string
+          enum: [OPERATIONS_AGENT, LOGISTICS_AGENT]
+        mode:
+          type: string
+        mandateVersion:
+          type: [integer, "null"]
+        allowedTools:
+          type: array
+          items:
+            type: string
+          example: [getActiveMandate, evaluateOffer, recordQuote, requestEscalation]
+        status:
+          type: string
+          enum: [ACTIVE, CLOSED]
+
+    Negotiation:
+      type: object
+      required: [id, operationId, campaignId, carrierId, status, createdAt]
+      properties:
+        id:
+          type: string
+          example: neg_01JABC123
+        operationId:
+          type: string
+        campaignId:
+          type: string
+        carrierId:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, CALLING, NEGOTIATING, QUOTED, REFUSED, NO_ANSWER, SELECTED, REJECTED]
+        latestOffer:
+          oneOf:
+            - $ref: "#/components/schemas/EvaluateOfferRequest"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+
+    EvaluateOfferRequest:
+      type: object
+      required: [basePrice, additionalCharges, currency, pickupDate, pickupTime]
+      properties:
+        basePrice:
+          type: number
+          example: 8500
+        additionalCharges:
+          type: number
+          minimum: 0
+          example: 0
+        currency:
+          type: string
+          example: MXN
+        pickupDate:
+          type: string
+          format: date
+          example: 2026-09-03
+        pickupTime:
+          type: string
+          example: "10:00"
+        conditions:
+          type: array
+          items:
+            type: string
+          example: [30 minutos de tolerancia]
+
+    EvaluateChangeRequest:
+      type: object
+      properties:
+        proposedPickupDate:
+          type: string
+          format: date
+        proposedPickupTime:
+          type: string
+        proposedTotalPrice:
+          type: number
+        delayMinutes:
+          type: integer
+        routeChanged:
+          type: boolean
+          default: false
+        notes:
+          type: string
+
+    EvaluationResult:
+      type: object
+      required: [allowed, code, mandateVersion, reasons]
+      properties:
+        allowed:
+          type: boolean
+          example: false
+        code:
+          type: string
+          enum: [ALLOWED, PRICE_EXCEEDS_MANDATE, DATE_OUTSIDE_MANDATE, TIME_OUTSIDE_MANDATE, CHARGE_NOT_ALLOWED, DELAY_EXCEEDS_MANDATE, ROUTE_CHANGE_NOT_ALLOWED]
+        mandateVersion:
+          type: integer
+          example: 1
+        reasons:
+          type: array
+          items:
+            type: string
+          example: [El precio total de 9500 MXN supera el máximo de 9000 MXN.]
+
+    RecordQuoteRequest:
+      allOf:
+        - $ref: "#/components/schemas/EvaluateOfferRequest"
+        - type: object
+          required: [validUntil]
+          properties:
+            validUntil:
+              type: string
+              format: date-time
+            dispatcherName:
+              type: string
+            callId:
+              type: string
+
+    Quote:
+      allOf:
+        - $ref: "#/components/schemas/RecordQuoteRequest"
+        - type: object
+          required: [id, negotiationId, carrierId, totalPrice, valid, mandateVersion, createdAt]
+          properties:
+            id:
+              type: string
+              example: quo_01JABC123
+            negotiationId:
+              type: string
+            carrierId:
+              type: string
+            totalPrice:
+              type: number
+              example: 8500
+            valid:
+              type: boolean
+            invalidReason:
+              type: [string, "null"]
+            mandateVersion:
+              type: integer
+            createdAt:
+              type: string
+              format: date-time
+
+    SelectWinnerRequest:
+      type: object
+      properties:
+        strategy:
+          type: string
+          enum: [LOWEST_VALID_TOTAL, BALANCED_SCORE]
+          default: LOWEST_VALID_TOTAL
+
+    MarketSelection:
+      type: object
+      required: [operationId, winningQuoteId, carrierId, strategy, explanation, selectedAt]
+      properties:
+        operationId:
+          type: string
+        winningQuoteId:
+          type: string
+        carrierId:
+          type: string
+        strategy:
+          type: string
+        explanation:
+          type: string
+          example: Menor precio total entre las ofertas vigentes que cumplen fecha y horario.
+        comparedQuoteIds:
+          type: array
+          items:
+            type: string
+        selectedAt:
+          type: string
+          format: date-time
+
+    AuthorizeCommitmentRequest:
+      type: object
+      required: [winningQuoteId]
+      properties:
+        winningQuoteId:
+          type: string
+          example: quo_01JABC123
+
+    CommitmentStatus:
+      type: string
+      enum: [PROPOSED, VERBALLY_AGREED, MANDATE_VALIDATED, SUMMARY_PENDING, SUMMARY_SENT, VALID, IN_EXECUTION, FULFILLED, CANCELLED_BY_CARRIER, CANCELLED]
+
+    Commitment:
+      type: object
+      required: [id, operationId, quoteId, carrierId, status, mandateVersion, totalPrice, currency, pickupAt, createdAt]
+      properties:
+        id:
+          type: string
+          example: com_01JABC123
+        operationId:
+          type: string
+        quoteId:
+          type: string
+        carrierId:
+          type: string
+        status:
+          $ref: "#/components/schemas/CommitmentStatus"
+        mandateVersion:
+          type: integer
+        totalPrice:
+          type: number
+        currency:
+          type: string
+        pickupAt:
+          type: string
+          format: date-time
+        verbalAgreementCallId:
+          type: [string, "null"]
+        evidenceStartMs:
+          type: [integer, "null"]
+        evidenceEndMs:
+          type: [integer, "null"]
+        recordingUrl:
+          type: [string, "null"]
+          format: uri
+        summaryChannel:
+          type: [string, "null"]
+          enum: [SMS, EMAIL, null]
+        summaryProviderId:
+          type: [string, "null"]
+        summarySentAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    VerbalAgreementRequest:
+      type: object
+      required: [callId, confirmedBy, exactTerms]
+      properties:
+        callId:
+          type: string
+        confirmedBy:
+          type: string
+          example: Laura, dispatcher de Transportes Atlas
+        exactTerms:
+          type: string
+          example: $8,500 MXN, jueves 10:00, Manzanillo a Guadalajara.
+
+    AttachEvidenceRequest:
+      type: object
+      required: [callId, recordingUrl, startMs, endMs]
+      properties:
+        callId:
+          type: string
+        recordingUrl:
+          type: string
+          format: uri
+        startMs:
+          type: integer
+          minimum: 0
+          example: 134300
+        endMs:
+          type: integer
+          minimum: 1
+          example: 139800
+
+    SendSummaryRequest:
+      type: object
+      required: [channel, recipient, message]
+      properties:
+        channel:
+          type: string
+          enum: [SMS, EMAIL]
+        recipient:
+          type: string
+          example: "+525555555501"
+        message:
+          type: string
+          example: Confirmamos Manzanillo a Guadalajara, jueves 10:00, total $8,500 MXN.
+
+    ReportIncidentRequest:
+      type: object
+      required: [callId, type, description]
+      properties:
+        callId:
+          type: string
+        type:
+          type: string
+          enum: [TRUCK_BREAKDOWN, DELAY, SCHEDULE_CHANGE, CARRIER_CANCELLATION, PRICE_CHANGE, OTHER]
+        description:
+          type: string
+        reportedBy:
+          type: string
+          example: Juan, conductor
+
+    Incident:
+      allOf:
+        - $ref: "#/components/schemas/ReportIncidentRequest"
+        - type: object
+          required: [id, operationId, status, createdAt]
+          properties:
+            id:
+              type: string
+              example: inc_01JABC123
+            operationId:
+              type: string
+            status:
+              type: string
+              enum: [OPEN, ALLOWED_CHANGE, NEEDS_ESCALATION, RESOLVED]
+            evaluationCode:
+              type: [string, "null"]
+            createdAt:
+              type: string
+              format: date-time
+
+    RequestEscalationRequest:
+      type: object
+      required: [callId, reason, contextSummary]
+      properties:
+        callId:
+          type: string
+        incidentId:
+          type: [string, "null"]
+        reason:
+          type: string
+          enum: [OUTSIDE_MANDATE, IDENTITY_UNCLEAR, CONTRADICTION, HUMAN_REQUESTED, TOOL_FAILURE, OTHER]
+        contextSummary:
+          type: string
+        requestedHumanPhone:
+          type: [string, "null"]
+
+    Escalation:
+      type: object
+      required: [id, operationId, callId, reason, contextSummary, status, createdAt]
+      properties:
+        id:
+          type: string
+          example: esc_01JABC123
+        operationId:
+          type: string
+        callId:
+          type: string
+        incidentId:
+          type: [string, "null"]
+        reason:
+          type: string
+        contextSummary:
+          type: string
+        status:
+          type: string
+          enum: [REQUESTED, DIALING_HUMAN, HUMAN_JOINED, RESOLVED, FAILED]
+        createdAt:
+          type: string
+          format: date-time
+
+    ConfirmExecutionEventRequest:
+      type: object
+      required: [callId, occurredAt, confirmedBy]
+      properties:
+        callId:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+        confirmedBy:
+          type: string
+        notes:
+          type: string
+
+    AuditEvent:
+      type: object
+      required: [id, operationId, eventType, actorType, occurredAt]
+      properties:
+        id:
+          type: string
+        operationId:
+          type: string
+        eventType:
+          type: string
+          example: QUOTE_RECORDED
+        actorType:
+          type: string
+          enum: [SYSTEM, INTERNAL_OPERATOR, OPERATIONS_AGENT, LOGISTICS_AGENT, CARRIER, DRIVER]
+        actorId:
+          type: [string, "null"]
+        callId:
+          type: [string, "null"]
+        entityType:
+          type: [string, "null"]
+        entityId:
+          type: [string, "null"]
+        mandateVersion:
+          type: [integer, "null"]
+        payload:
+          type: object
+          additionalProperties: true
+        occurredAt:
+          type: string
+          format: date-time
+
+    TwilioVoiceWebhook:
+      type: object
+      required: [CallSid, From, To]
+      properties:
+        CallSid:
+          type: string
+        From:
+          type: string
+        To:
+          type: string
+        CallStatus:
+          type: string
+
+    TwilioStatusWebhook:
+      type: object
+      required: [CallSid, CallStatus]
+      properties:
+        CallSid:
+          type: string
+        CallStatus:
+          type: string
+          enum: [queued, initiated, ringing, in-progress, completed, busy, failed, no-answer, canceled]
+        CallDuration:
+          type: [string, "null"]
+
+    TwilioRecordingWebhook:
+      type: object
+      required: [CallSid, RecordingSid, RecordingUrl, RecordingStatus]
+      properties:
+        CallSid:
+          type: string
+        RecordingSid:
+          type: string
+        RecordingUrl:
+          type: string
+          format: uri
+        RecordingStatus:
+          type: string
+        RecordingDuration:
+          type: [string, "null"]
