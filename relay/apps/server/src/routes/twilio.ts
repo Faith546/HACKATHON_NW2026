@@ -1,5 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
 import twilio from "twilio";
+import {
+  applyRecordingCallback,
+  type TwilioRecordingCallbackBody,
+} from "../services/recording-service.js";
 
 type TwilioCallBody = {
   CallSid?: string;
@@ -83,6 +87,31 @@ const twilioRoutes: FastifyPluginAsync = async (app) => {
 
     return reply.code(204).send();
   });
+
+  app.post<{ Body: TwilioRecordingCallbackBody }>(
+    "/recordings/status",
+    async (request, reply) => {
+      // TODO(security): validate X-Twilio-Signature before trusting this
+      // callback. It remains open only to preserve the current ngrok spike.
+      try {
+        const recording = applyRecordingCallback(request.body ?? {});
+        console.info(
+          [
+            "[RECORDING] status callback",
+            `CallSid: ${recording.callId}`,
+            `RecordingSid: ${recording.recordingSid}`,
+            `Status: ${recording.status}`,
+          ].join("\n"),
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Invalid recording callback";
+        console.error(`[RECORDING] invalid callback: ${message}`);
+        return reply.code(400).send({ error: "INVALID_RECORDING_CALLBACK" });
+      }
+    },
+  );
 };
 
 export default twilioRoutes;

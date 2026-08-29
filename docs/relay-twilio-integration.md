@@ -2,13 +2,13 @@
 
 ## Purpose
 
-RELAY es un servicio de voz aislado y físicamente validado hasta Checkpoint 3. El team backend y la UI deben consumir sus resultados; no deben reimplementar telefonía, Media Streams ni OpenAI Realtime.
+RELAY es un servicio de voz aislado y físicamente validado hasta Checkpoint 4. El team backend y la UI deben consumir sus resultados; no deben reimplementar telefonía, Media Streams ni OpenAI Realtime.
 
 Baseline exacta:
 
 ```text
-RELAY commit 541f4e645ad00919b89da6395f6886496599dfae
-checkpoint-3 negotiator core validated
+RELAY commit 2f95b003bef56b66c42d1ff5edd885c6b4b6c86c
+checkpoint-4 recording timing physically validated
 ```
 
 ## Boundary
@@ -59,6 +59,9 @@ RELAY owns:
 - CallSid/StreamSid call context.
 - Relay Negotiator and function tools.
 - Deterministic quote validation for the current fixture.
+- Twilio recording request and lifecycle callbacks.
+- RecordingSid metadata, timing observation and safe recording download.
+- Evidence diagnostics that explicitly refuse to invent an offset.
 
 Team app owns or will own:
 
@@ -84,13 +87,42 @@ Shared contract to design next:
 | Checkpoint 1 Twilio webhook/TwiML | Included, physically validated |
 | Checkpoint 2 PSTN/Media Streams/Realtime/barge-in | Included, physically validated |
 | Checkpoint 3 Negotiator/quotes/mandate validation | Included, physically validated |
-| Checkpoint 4 recording/timing/debug inspector | Excluded from this baseline |
-| Stream-to-recording evidence correlation | Not final; remains `UNRESOLVED` in development work |
+| Checkpoint 4 recording/timing/debug inspector | Included, physically validated |
+| Stream-to-recording evidence correlation | Designed but unresolved: `RECORDING_START_OFFSET_UNKNOWN` |
 | Outbound real calls | Not implemented |
 | Three concurrent carriers | Not implemented |
 | Persistence | Not implemented in RELAY service |
 
-Checkpoint 4 is not classified as broken. It is excluded because its current RELAY implementation lives after the stable Checkpoint 3 commit and does not yet have its own validated checkpoint commit.
+Checkpoint 4 physically validated the real RecordingSid lifecycle, Media Stream timestamps, OpenAI caller speech ranges, secure MP3 download and automatic latest-call inspection. Automatic evidence alignment is intentionally not inferred: stream zero and recording zero are separate clocks until an explicit physical anchor is calibrated.
+
+## Recording and inspection runbook
+
+Relevant routes:
+
+```text
+POST /webhooks/twilio/recordings/status
+GET  /api/debug/calls/latest
+GET  /api/calls/:callId/recording
+GET  /api/calls/:callId/timing
+GET  /api/calls/:callId/evidence-debug
+GET  /api/calls/:callId/transcript
+```
+
+After hanging up a physical call:
+
+```bash
+cd relay
+./scripts/inspect-latest-call.sh
+```
+
+The inspector discovers CallSid, StreamSid and RecordingSid, polls up to 90 seconds for `completed`, prints timing/evidence/transcript, downloads the authenticated MP3 to ignored `.tmp/recordings/`, and opens it on macOS. `TECHNICAL OBSERVATION READY` is not a claim that final evidence alignment is solved.
+
+Manual download remains available:
+
+```bash
+cd relay/apps/server
+npm run recording:download -- RE...
+```
 
 ## Runtime configuration
 

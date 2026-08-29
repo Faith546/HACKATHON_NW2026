@@ -8,14 +8,29 @@ import { createRelayNegotiator } from "../agents/relay-negotiator.js";
 import { demoInboundCarrierId, demoMandate } from "../fixtures/demo-operation.js";
 import { transcriptBus, type TranscriptTurn } from "../live/transcript.js";
 import { callContextStore } from "../stores/call-context-store.js";
+import { callTimingStore } from "../stores/call-timing-store.js";
+import { startTwilioRecordingForCall } from "../telephony/twilio-recording.js";
 
 type TwilioMessage = {
   event?: string;
+  sequenceNumber?: string;
   streamSid?: string;
   start?: {
     callSid?: string;
     streamSid?: string;
   };
+  media?: {
+    timestamp?: string;
+    track?: string;
+    chunk?: string;
+  };
+};
+
+type OpenAISpeechEvent = {
+  type: "input_audio_buffer.speech_started" | "input_audio_buffer.speech_stopped";
+  item_id?: string;
+  audio_start_ms?: number;
+  audio_end_ms?: number;
 };
 
 function errorMessage(value: unknown): string {
@@ -59,7 +74,9 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
     });
 
     let activeCallId: string | undefined;
+    let activeStreamSid: string | undefined;
     let callStartedAtMs: number | undefined;
+    let firstMediaLogged = false;
     const firstSeenAtByTurn = new Map<string, number>();
     const printedFinalItems = new Set<string>();
     const agent = createRelayNegotiator({
@@ -156,6 +173,39 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
     });
 
     session.on("transport_event", (event) => {
+      if (
+        event.type === "input_audio_buffer.speech_started" ||
+        event.type === "input_audio_buffer.speech_stopped"
+      ) {
+        const speechEvent = event as OpenAISpeechEvent;
+        if (!activeCallId || !speechEvent.item_id) return;
+
+        if (speechEvent.type === "input_audio_buffer.speech_started") {
+          const observed = callTimingStore.observeSpeechStarted(
+            activeCallId,
+            speechEvent.item_id,
+            speechEvent.audio_start_ms,
+          );
+          if (observed) {
+            console.info(
+              `[TIMING] caller speech started\nClock: openai_input\nItemId: ${speechEvent.item_id}\nStart: ${speechEvent.audio_start_ms}`,
+            );
+          }
+        } else {
+          const observed = callTimingStore.observeSpeechStopped(
+            activeCallId,
+            speechEvent.item_id,
+            speechEvent.audio_end_ms,
+          );
+          if (observed) {
+            console.info(
+              `[TIMING] caller speech stopped\nClock: openai_input\nItemId: ${speechEvent.item_id}\nEnd: ${speechEvent.audio_end_ms}`,
+            );
+          }
+        }
+        return;
+      }
+
       if (event.type !== "twilio_message") return;
 
       const message = event.message as TwilioMessage;
@@ -177,6 +227,7 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
         } else {
           const startedAt = new Date();
           activeCallId = callId;
+          activeStreamSid = streamSid;
           callStartedAtMs = startedAt.getTime();
           callContextStore.startCall({
             callId,
@@ -186,11 +237,50 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
             streamSid,
             carrierId: demoInboundCarrierId,
           });
+
+          if (streamSid) {
+            callTimingStore.startStream(callId, streamSid);
+            console.info(
+              `[TIMING] stream started\nCallSid: ${callId}\nStreamSid: ${streamSid}`,
+            );
+          } else {
+            console.error("[TIMING] Twilio start did not include StreamSid");
+          }
+
+          void startTwilioRecordingForCall(callId).catch((error) => {
+            console.error(
+              `[RECORDING] start failed\nCallSid: ${callId}\nError: ${errorMessage(error)}`,
+            );
+          });
+        }
+      }
+
+      if (message.event === "media" && message.media && message.streamSid) {
+        const observed = callTimingStore.observeMedia({
+          streamSid: message.streamSid,
+          timestamp: message.media.timestamp,
+          sequenceNumber: message.sequenceNumber,
+          chunk: message.media.chunk,
+          track: message.media.track,
+        });
+
+        if (observed && !firstMediaLogged) {
+          firstMediaLogged = true;
+          const timing = callTimingStore.getByStreamSid(message.streamSid);
+          console.info(
+            `[TIMING] first media\nClock: twilio_stream\nTimestamp: ${timing?.stream.firstMediaTimestampMs ?? "unknown"}`,
+          );
         }
       }
 
       if (message.event === "stop") {
         console.info("[TWILIO] stop");
+        const timing = activeStreamSid
+          ? callTimingStore.getByStreamSid(activeStreamSid)
+          : undefined;
+        console.info(
+          `[TIMING] last media\nClock: twilio_stream\nTimestamp: ${timing?.stream.lastMediaTimestampMs ?? "unknown"}`,
+        );
         closeSession();
       }
     });

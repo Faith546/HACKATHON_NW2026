@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "tsx --test src/**/*.test.ts",
+    "recording:download": "tsx scripts/download-recording.ts"
   },
   "dependencies": {
     "@fastify/formbody": "^9.0.0",

@@ -2,6 +2,7 @@ import "dotenv/config";
 import formbody from "@fastify/formbody";
 import websocket from "@fastify/websocket";
 import Fastify from "fastify";
+import evidenceDebugRoutes from "./routes/evidence-debug.js";
 import { registerLiveTranscriptRoutes } from "./routes/live-transcript.js";
 import mediaRoutes from "./routes/media.js";
 import quoteRoutes from "./routes/quotes.js";
@@ -22,6 +23,7 @@ await app.register(twilioRoutes, { prefix: "/webhooks/twilio" });
 await app.register(mediaRoutes);
 await registerLiveTranscriptRoutes(app);
 await app.register(quoteRoutes);
+await app.register(evidenceDebugRoutes);
 
 try {
   await app.listen({ host: "0.0.0.0", port });

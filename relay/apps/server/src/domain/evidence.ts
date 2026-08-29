@@ -1,11 +1,15 @@
+export type RecordingEvidenceRange = {
+  clock: "recording";
+  recordingSid: string;
+  startMs: number;
+  endMs: number;
+};
+
 export type QuoteEvidence = {
   callId: string;
   turnId: string;
-  evidenceStartMs?: number;
-  evidenceEndMs?: number;
-  recordingSid?: string;
-  recordingUrl?: string;
+  range?: RecordingEvidenceRange;
 };
 
-// TODO(recording): populate evidence times only after correlating the Realtime
-// turn with Twilio media.timestamp. Local transcript timestamps are not evidence.
+// TODO(recording): populate range only after a verified clock correlation.
+// TranscriptTurn.timestampMs is local UI/debug metadata, not evidence.

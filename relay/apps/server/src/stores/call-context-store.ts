@@ -28,6 +28,22 @@ export class InMemoryCallContextStore {
     const context = this.calls.get(callId);
     return context ? structuredClone(context) : undefined;
   }
+
+  getLatest(): CallContext | undefined {
+    let latest: CallContext | undefined;
+
+    for (const context of this.calls.values()) {
+      if (
+        !latest ||
+        context.startedAt > latest.startedAt ||
+        (context.startedAt === latest.startedAt && context.callId > latest.callId)
+      ) {
+        latest = context;
+      }
+    }
+
+    return latest ? structuredClone(latest) : undefined;
+  }
 }
 
 export const callContextStore = new InMemoryCallContextStore();
