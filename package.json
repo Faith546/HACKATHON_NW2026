@@ -16,7 +16,7 @@
     "@types/express": "^5.0.6",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/yamljs": "^0.2.34",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^12.10.0",
     "cors": "^2.8.6",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
