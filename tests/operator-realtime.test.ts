@@ -125,7 +125,7 @@ describe("Authorized operator Realtime flow", () => {
     );
   });
 
-  it("requires explicit speech and switches to DELIVERY only after exact resolution", async () => {
+  it("switches to DELIVERY only after exact resolution and requires its address", async () => {
     const calls = new CallsService({
       repository: new InMemoryCallRepository(),
       queue: new InMemoryJobQueue(),
@@ -217,7 +217,7 @@ describe("Authorized operator Realtime flow", () => {
         }),
       (error: unknown) =>
         error instanceof ApiError &&
-        error.code === "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
+        error.code === "VOICE_TOOL_ARGUMENTS_INVALID",
     );
     assert.equal(executed.includes("confirmDelivery"), false);
 
@@ -235,6 +235,7 @@ describe("Authorized operator Realtime flow", () => {
     await realtime.executeTool(session.id, "confirmDelivery", {
       occurredAt: "2026-09-04T04:00:00.000Z",
       confirmedBy: "Gabriel",
+      deliveryAddress: "Guadalajara",
     });
     assert.equal(executed.includes("confirmDelivery"), true);
   });
