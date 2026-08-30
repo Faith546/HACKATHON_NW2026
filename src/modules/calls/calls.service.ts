@@ -58,12 +58,15 @@ interface CampaignDispatchState {
   pumping: boolean;
 }
 
+const busyCommitRetryDelayMs = 3 * 60 * 1_000;
+
 export class CallsService implements CallScheduler {
   private readonly now: () => Date;
   private readonly createId: () => string;
   private readonly campaignDispatches = new Map<string, CampaignDispatchState>();
   private readonly campaignIdByCallId = new Map<string, string>();
   private readonly scheduledCampaignIds = new Set<string>();
+  private readonly scheduledBusyCommitRetries = new Set<string>();
 
   constructor(private readonly dependencies: CallsServiceDependencies) {
     this.now = dependencies.now ?? (() => new Date());
@@ -549,6 +552,7 @@ export class CallsService implements CallScheduler {
       );
     }
     if (current.status === nextStatus) {
+      this.scheduleBusyCommitRetry(current);
       try {
         await this.dependencies.lifecycleObserver?.onStatusChanged({
           call: current,
@@ -593,6 +597,7 @@ export class CallsService implements CallScheduler {
         payload: { previousStatus: current.status, status: nextStatus },
       });
     }
+    this.scheduleBusyCommitRetry(result.call);
     try {
       await this.dependencies.lifecycleObserver?.onStatusChanged({
         call: result.call,
@@ -605,6 +610,61 @@ export class CallsService implements CallScheduler {
       }
     }
     return result;
+  }
+
+  private scheduleBusyCommitRetry(call: Call): void {
+    if (
+      call.direction !== "OUTBOUND" ||
+      call.purpose !== "COMMIT" ||
+      call.status !== "BUSY" ||
+      !call.operationId ||
+      !call.carrierId ||
+      this.scheduledBusyCommitRetries.has(call.id)
+    ) {
+      return;
+    }
+
+    this.scheduledBusyCommitRetries.add(call.id);
+    process.stdout.write(
+      `[COMMIT_RETRY] scheduled operationId=${call.operationId} callId=${call.id} delayMs=${busyCommitRetryDelayMs}\n`,
+    );
+    const timer = setTimeout(() => {
+      void this.retryBusyCommitCall(call).finally(() => {
+        this.scheduledBusyCommitRetries.delete(call.id);
+      });
+    }, busyCommitRetryDelayMs);
+    timer.unref();
+  }
+
+  private async retryBusyCommitCall(call: Call): Promise<void> {
+    const operationId = call.operationId;
+    const carrierId = call.carrierId;
+    if (!operationId || !carrierId) return;
+
+    const current = await this.dependencies.repository.findById(call.id);
+    if (!current || current.status !== "BUSY") return;
+
+    const commitCallCount =
+      await this.dependencies.repository.countByOperationPurpose(
+        operationId,
+        "COMMIT",
+      );
+    if (commitCallCount !== 1) return;
+
+    try {
+      const retry = await this.enqueueOutbound({
+        operationId,
+        carrierId,
+        purpose: "COMMIT",
+      });
+      process.stdout.write(
+        `[COMMIT_RETRY] enqueued operationId=${operationId} previousCallId=${call.id} retryCallId=${retry.id}\n`,
+      );
+    } catch (error) {
+      process.stderr.write(
+        `[COMMIT_RETRY] failed operationId=${operationId} previousCallId=${call.id} message=${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    }
   }
 
   async saveBrief(callId: string, input: CallBriefInput): Promise<CallBrief> {
