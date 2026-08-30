@@ -11,7 +11,9 @@ const migrationsFolder = path.join(
 );
 
 const baselined = baselineCompatibleDatabase(sqlite, migrationsFolder);
+sqlite.pragma("foreign_keys = OFF");
 migrate(db, { migrationsFolder });
+sqlite.pragma("foreign_keys = ON");
 if (baselined) {
   process.stdout.write("SQLite preexistente adoptado como baseline 0000.\n");
 }
