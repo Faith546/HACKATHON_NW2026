@@ -23,10 +23,10 @@ describe("Operations OpenAPI contract", () => {
   });
 
   it("creates, lists, summarizes and cancels an operation with public money DTOs", async () => {
-    const suffix = crypto.randomUUID();
+    const containerNumber = crypto.randomUUID().replace(/\D/g, "").padEnd(4, "0").slice(0, 4);
     const payload = {
       customerName: "Acme Corp",
-      containerNumber: `MSKU-${suffix}`,
+      containerNumber,
       origin: "Puerto de Manzanillo",
       destination: "Guadalajara",
       service: "DRAYAGE",
@@ -129,9 +129,8 @@ describe("Operations OpenAPI contract", () => {
     assert.equal(invalidList.status, 422);
   });
 
-  it("recovers harmless container formatting but never auto-selects a missing character", async () => {
-    const digits = crypto.randomUUID().replace(/\D/g, "").padEnd(7, "0");
-    const containerNumber = `ABCD${digits.slice(0, 7)}`;
+  it("resolves an exact four-digit container and rejects an incomplete code", async () => {
+    const containerNumber = crypto.randomUUID().replace(/\D/g, "").padEnd(4, "0").slice(0, 4);
     const operation = await operationsService.createOperation({
       customerName: "Container recall test",
       containerNumber,
@@ -146,17 +145,13 @@ describe("Operations OpenAPI contract", () => {
       },
     });
 
-    const formatted = containerNumber
-      .toLowerCase()
-      .split("")
-      .join(" ");
     const resolved = await operationsService.resolveOperationReference({
-      containerNumber: formatted,
+      containerNumber,
     });
     assert.equal(resolved.id, operation.id);
 
     const missingCharacter =
-      containerNumber.slice(0, 3) + containerNumber.slice(4);
+      containerNumber.slice(0, 3);
     await assert.rejects(
       () =>
         operationsService.resolveOperationReference({
@@ -164,9 +159,7 @@ describe("Operations OpenAPI contract", () => {
         }),
       (error: unknown) =>
         error instanceof ApiError &&
-        error.code === "RESOURCE_NOT_FOUND" &&
-        Array.isArray(error.details?.possibleContainerNumbers) &&
-        error.details.possibleContainerNumbers.includes(containerNumber),
+        error.code === "INVALID_CONTAINER_NUMBER",
     );
   });
 });

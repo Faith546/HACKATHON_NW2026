@@ -40,7 +40,7 @@ describe("IntegrationService facade", () => {
         {
           id: olderOperationId,
           customerName: "Older operation",
-          containerNumber: `OLD-${suffix}`,
+          containerNumber: "8101",
           origin: "A",
           destination: "B",
           status: "BOOKED",
@@ -50,7 +50,7 @@ describe("IntegrationService facade", () => {
         {
           id: newestOperationId,
           customerName: "Newest operation",
-          containerNumber: `NEW-${suffix}`,
+          containerNumber: "8102",
           origin: "A",
           destination: "B",
           status: "SOURCING",
@@ -150,9 +150,8 @@ describe("IntegrationService facade", () => {
     );
   });
 
-  it("returns a container suggestion to Voice without selecting it", async () => {
-    const digits = randomUUID().replace(/\D/g, "").padEnd(7, "0").slice(0, 7);
-    const containerNumber = `ABCD${digits}`;
+  it("returns status for four digits and rejects an incomplete container code", async () => {
+    const containerNumber = randomUUID().replace(/\D/g, "").padEnd(4, "0").slice(0, 4);
     const operation = await operationsService.createOperation({
       customerName: "Container recall",
       containerNumber,
@@ -266,26 +265,23 @@ describe("IntegrationService facade", () => {
         ],
       );
 
-      const missingCharacter =
-        containerNumber.slice(0, 4) + containerNumber.slice(5);
-      const result = await voiceIntegration.executeVoiceTool({
-        name: "getOperationStatus",
-        context: {
-          callId: "call_container_recall",
-          operationId: null,
-          carrierId: null,
-          negotiationId: null,
-          actorType: "INTERNAL_OPERATOR",
-          mandateId: null,
-        },
-        arguments: { containerNumber: missingCharacter },
-      });
-
-      assert.deepEqual(result, {
-        found: false,
-        requestedContainerNumber: missingCharacter,
-        possibleContainerNumbers: [containerNumber],
-      });
+      const incompleteCode = containerNumber.slice(0, 3);
+      await assert.rejects(
+        () =>
+          voiceIntegration.executeVoiceTool({
+            name: "getOperationStatus",
+            context: {
+              callId: "call_container_recall",
+              operationId: null,
+              carrierId: null,
+              negotiationId: null,
+              actorType: "INTERNAL_OPERATOR",
+              mandateId: null,
+            },
+            arguments: { containerNumber: incompleteCode },
+          }),
+        (error: unknown) => isApiErrorCode(error, "VOICE_TOOL_ARGUMENTS_INVALID"),
+      );
     } finally {
       db.delete(auditEvents)
         .where(eq(auditEvents.operationId, operation.id))

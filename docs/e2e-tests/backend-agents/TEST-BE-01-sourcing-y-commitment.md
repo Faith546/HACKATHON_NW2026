@@ -72,7 +72,7 @@ Enviar `POST /api/v1/operations`:
 ```json
 {
   "customerName": "Textiles Pacífico E2E-<runId>",
-  "containerNumber": "TCLU1234567",
+  "containerNumber": "1234",
   "origin": "Puerto de Manzanillo",
   "destination": "Guadalajara",
   "service": "DRAYAGE",
@@ -311,7 +311,7 @@ Enviar `POST /api/v1/commitments/{commitmentId}/summary`:
 {
   "channel": "SMS",
   "recipient": "+525500000001",
-  "message": "Confirmamos TCLU1234567: Manzanillo a Guadalajara, pickup 3-sep-2026, total 8,500 MXN."
+  "message": "Confirmamos 1234: Manzanillo a Guadalajara, pickup 3-sep-2026, total 8,500 MXN."
 }
 ```
 

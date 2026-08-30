@@ -7,7 +7,10 @@ if (!/^\+[1-9]\d{7,14}$/.test(carrierPhone)) {
 }
 const operationId = process.env.DEMO_OPERATION_ID?.trim() || "op_relay_inbound_demo";
 const containerNumber =
-  process.env.DEMO_CONTAINER_NUMBER?.trim() || "RELAY-INBOUND-DEMO";
+  process.env.DEMO_CONTAINER_NUMBER?.trim() || "1234";
+if (!/^\d{4}$/.test(containerNumber)) {
+  throw new Error("DEMO_CONTAINER_NUMBER debe contener exactamente cuatro dígitos.");
+}
 const now = new Date().toISOString();
 
 const seed = sqlite.transaction(() => {

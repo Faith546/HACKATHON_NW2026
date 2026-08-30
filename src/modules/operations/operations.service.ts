@@ -11,6 +11,10 @@ import type {
   OperationResponse,
   OperationStatus,
 } from "./operations.types";
+import {
+  containerNumberSchema,
+  CreateOperationSchema,
+} from "./operations.types";
 
 type OperationRow = typeof operations.$inferSelect;
 type CommitmentRow = typeof commitments.$inferSelect;
@@ -71,6 +75,16 @@ export class OperationsService {
     actorId?: string,
     carrierId?: string,
   ) {
+    const parsedInput = CreateOperationSchema.safeParse(input);
+    if (!parsedInput.success) {
+      throw new ApiError(
+        422,
+        "VALIDATION_ERROR",
+        "Datos de operación inválidos.",
+        parsedInput.error.format(),
+      );
+    }
+    const validatedInput = parsedInput.data;
     if (carrierId) {
       const carrier = (await carriersService.listCarriers()).find(
         (candidate) => candidate.id === carrierId,
@@ -88,7 +102,7 @@ export class OperationsService {
     }
 
     const result = operationsRepository.createOperationWithMandate(
-      input,
+      validatedInput,
       actorId,
     );
     if (carrierId) {
@@ -128,7 +142,19 @@ export class OperationsService {
     containerNumber?: string;
   }) {
     const operationId = input.operationId?.trim();
-    const containerNumber = input.containerNumber?.trim();
+    const rawContainerNumber = input.containerNumber?.trim();
+    const parsedContainerNumber = rawContainerNumber
+      ? containerNumberSchema.safeParse(rawContainerNumber)
+      : null;
+    if (parsedContainerNumber && !parsedContainerNumber.success) {
+      throw new ApiError(
+        422,
+        "INVALID_CONTAINER_NUMBER",
+        "El código del contenedor debe tener exactamente cuatro dígitos.",
+        { containerNumber: rawContainerNumber },
+      );
+    }
+    const containerNumber = parsedContainerNumber?.data;
     if (!operationId && !containerNumber) {
       throw new ApiError(
         422,

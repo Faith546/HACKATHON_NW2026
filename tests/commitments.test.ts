@@ -93,7 +93,7 @@ async function createWinningFixture(
   await db.insert(operations).values({
     id: operationId,
     customerName: "NextWave",
-    containerNumber: `NW${randomUUID().slice(0, 10)}`,
+    containerNumber: randomUUID().replace(/\D/g, "").padEnd(4, "0").slice(0, 4),
     origin: "Manzanillo",
     destination: "Guadalajara",
     status: overrides.operationStatus ?? "SOURCING",

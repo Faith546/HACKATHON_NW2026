@@ -19,6 +19,7 @@ import {
 } from "../market/market.types";
 import {
   CancelOperationSchema,
+  containerNumberSchema,
   CreateMandateInputSchema,
   CreateOperationSchema,
   currencyInputSchema,
@@ -26,19 +27,15 @@ import {
 import type { VoiceToolName } from "./voice-core.port";
 
 const identifier = z.string().trim().min(1);
-const containerReference = identifier.describe(
-  "Número de contenedor confirmado carácter por carácter. Conserva todas las letras y dígitos; no completes ni elimines caracteres.",
+const containerNumber = containerNumberSchema.describe(
+  "Código del contenedor confirmado por el operador: exactamente cuatro dígitos.",
 );
-const containerNumber = containerReference.regex(/^[A-Z]{4}[0-9]{7}$/, {
-  message:
-    "El contenedor debe tener exactamente cuatro letras y siete dígitos.",
-});
 const nonEmptyText = z.string().trim().min(1);
 const emptyArguments = z.object({}).strict();
 const operationReferenceArguments = z
   .object({
     operationId: identifier.optional(),
-    containerNumber: containerReference.optional(),
+    containerNumber: containerNumber.optional(),
   })
   .strict();
 const commitmentEvidenceArguments = z
@@ -146,7 +143,7 @@ export const voiceToolDescriptions: Record<VoiceToolName, string> = {
   createMandate: "Crea una nueva versión inmutable del mandato de la operación.",
   getOperationStatus: "Consulta el resumen operativo. En una llamada de operador sin contexto, resuelve de forma inequívoca por operationId o containerNumber.",
   listCarriers: "Lista los carriers disponibles para una campaña.",
-  startCampaign: "Inicia una campaña con al menos tres carriers elegidos explícitamente.",
+  startCampaign: "Inicia una campaña con al menos un carrier elegido explícitamente.",
   getQuotes: "Lista las cotizaciones registradas para la operación.",
   getCommitments: "Lista el historial de commitments de la operación.",
   cancelOperation: "Cancela la operación con una razón explícita y auditable.",
@@ -178,8 +175,7 @@ export function parseVoiceToolArguments(
       ? {
           ...value,
           containerNumber: containerValue
-            .replace(/[^A-Za-z0-9]/g, "")
-            .toUpperCase(),
+            .replace(/[\s,._-]/g, ""),
         }
       : value;
   const parsed = voiceToolSchemas[name].safeParse(normalizedValue);

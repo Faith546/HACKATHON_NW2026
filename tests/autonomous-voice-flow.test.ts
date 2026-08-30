@@ -29,7 +29,7 @@ describe("Autonomous voice sourcing orchestration", () => {
     const suffix = randomUUID();
     const operation = await operationsService.createOperation({
       customerName: `Autonomous ${suffix}`,
-      containerNumber: `AUTO-${suffix}`,
+      containerNumber: randomUUID().replace(/\D/g, "").padEnd(4, "0").slice(0, 4),
       origin: "Manzanillo",
       destination: "Guadalajara",
       weightKg: 10_000,

@@ -29,7 +29,7 @@ Todos los flujos usan datos nuevos por ejecución. Los sufijos deben incluir un 
 ```text
 Reloj controlado T0: 2026-09-01T12:00:00.000Z
 Cliente: Textiles Pacífico E2E-<runId>
-Contenedor: TCLU1234567
+Contenedor: 1234
 Origen: Puerto de Manzanillo
 Destino: Guadalajara
 Servicio: DRAYAGE

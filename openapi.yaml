@@ -976,7 +976,9 @@ components:
           example: Textiles Pacífico
         containerNumber:
           type: string
-          example: TCLU1234567
+          pattern: '^\d{4}$'
+          example: "1234"
+          description: Código del contenedor compuesto por exactamente cuatro dígitos.
         origin:
           type: string
           example: Puerto de Manzanillo

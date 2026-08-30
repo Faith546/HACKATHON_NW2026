@@ -37,7 +37,7 @@ describe("RealtimeService", () => {
     assert.match(instructions, /repite de inmediato la última pregunta pendiente/i);
     assert.match(instructions, /peso aproximado de la carga en kilogramos/i);
     assert.match(instructions, /Nunca supongas ni uses un peso por defecto/i);
-    assert.match(instructions, /repítelo carácter por carácter/i);
+    assert.match(instructions, /repite claramente los cuatro dígitos/i);
     assert.match(instructions, /Nunca selecciones automáticamente/i);
   });
 

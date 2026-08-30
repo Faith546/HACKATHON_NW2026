@@ -50,7 +50,7 @@ describe("voice tool schemas", () => {
   it("requires weight when Voice creates an operation", () => {
     const operation = {
       customerName: "Textiles Pacífico",
-      containerNumber: "TCLU1234567",
+      containerNumber: "1234",
       origin: "Manzanillo",
       destination: "Guadalajara",
       service: "DRAYAGE" as const,
@@ -74,7 +74,7 @@ describe("voice tool schemas", () => {
     );
   });
 
-  it("preserves repeated container characters and rejects a missing digit", () => {
+  it("normalizes four spoken digits and rejects incomplete container codes", () => {
     const baseOperation = {
       customerName: "Textiles Pacífico",
       origin: "Manzanillo",
@@ -89,15 +89,15 @@ describe("voice tool schemas", () => {
     };
     const parsed = parseVoiceToolArguments("createOperation", {
       ...baseOperation,
-      containerNumber: "a, b, c, d, 1, 1, 2, 2, 3, 3, 4",
+      containerNumber: "1, 1, 2, 2",
     });
 
-    assert.equal(parsed.containerNumber, "ABCD1122334");
+    assert.equal(parsed.containerNumber, "1122");
     assert.throws(
       () =>
         parseVoiceToolArguments("createOperation", {
           ...baseOperation,
-          containerNumber: "ABCD112334",
+          containerNumber: "112",
         }),
       (error: unknown) =>
         typeof error === "object" &&

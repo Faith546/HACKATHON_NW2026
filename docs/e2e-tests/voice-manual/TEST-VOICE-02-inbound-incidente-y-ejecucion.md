@@ -33,7 +33,7 @@ El participante dice:
 
 ```text
 Soy Juan, conductor de Transportes Atlas. Llamo por el contenedor
-TCLU1234567, de Manzanillo a Guadalajara.
+1234, de Manzanillo a Guadalajara.
 ```
 
 Respuesta hablada esperada:
@@ -145,7 +145,7 @@ Respuesta esperada:
 El conductor llama de nuevo y dice:
 
 ```text
-Confirmo que recogí el contenedor TCLU1234567 en Manzanillo
+Confirmo que recogí el contenedor 1234 en Manzanillo
 a las 14:00 del 4 de septiembre.
 ```
 
@@ -170,7 +170,7 @@ Backend esperado:
 El conductor dice:
 
 ```text
-Confirmo entrega del contenedor TCLU1234567 en Guadalajara
+Confirmo entrega del contenedor 1234 en Guadalajara
 a las 22:00 del 4 de septiembre.
 ```
 

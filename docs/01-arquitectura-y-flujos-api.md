@@ -295,7 +295,7 @@ Se espera `200` con `{ "status": "ok" }`.
 El operador dice o captura:
 
 ```text
-Mover TCLU1234567 de Manzanillo a Guadalajara el jueves,
+Mover el contenedor 1234 de Manzanillo a Guadalajara el jueves,
 máximo $9,000 MXN.
 ```
 

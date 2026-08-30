@@ -99,7 +99,7 @@ describe("AuditWriter", () => {
     await db.insert(operations).values({
       id: operationId,
       customerName: "Audit Test",
-      containerNumber: `AUD${randomUUID().slice(0, 10)}`,
+      containerNumber: randomUUID().replace(/\D/g, "").padEnd(4, "0").slice(0, 4),
       origin: "A",
       destination: "B",
     });

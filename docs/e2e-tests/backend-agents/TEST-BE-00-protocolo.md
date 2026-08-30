@@ -110,7 +110,7 @@ El orquestador entrega:
 ```json
 {
   "operation": {
-    "containerNumber": "TCLU1234567",
+    "containerNumber": "1234",
     "origin": "Puerto de Manzanillo",
     "destination": "Guadalajara"
   },

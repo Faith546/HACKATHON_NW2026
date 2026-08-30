@@ -155,7 +155,7 @@ async function createOperation(baseUrl: string) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       customerName: "Campaign Test",
-      containerNumber: `CMP-${randomUUID()}`,
+      containerNumber: randomUUID().replace(/\D/g, "").padEnd(4, "0").slice(0, 4),
       origin: "A",
       destination: "B",
       service: "DRAYAGE",

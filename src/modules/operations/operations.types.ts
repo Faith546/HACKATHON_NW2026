@@ -43,6 +43,13 @@ export const moneySchema = z
     message: "El monto debe ser de al menos una unidad monetaria mínima.",
   });
 
+export const containerNumberSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}$/, {
+    message: "El código del contenedor debe tener exactamente cuatro dígitos.",
+  });
+
 export const CreateMandateInputSchema = z.object({
   maxTotalPrice: moneySchema,
   currency: currencySchema,
@@ -52,7 +59,7 @@ export const CreateMandateInputSchema = z.object({
 
 export const CreateOperationSchema = z.object({
   customerName: z.string().trim().min(1),
-  containerNumber: z.string().trim().min(1),
+  containerNumber: containerNumberSchema,
   origin: z.string().trim().min(1),
   destination: z.string().trim().min(1),
   weightKg: z.number().int().positive().optional().default(10000),

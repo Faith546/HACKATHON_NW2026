@@ -221,7 +221,7 @@ El operador dice:
 
 ```text
 Soy el operador autorizado. Crea una operación para Textiles Pacífico.
-El contenedor es TCLU<runId>, sale del Puerto de Manzanillo y va a
+El código del contenedor es <containerCode>, con exactamente cuatro dígitos; sale del Puerto de Manzanillo y va a
 Guadalajara. Es servicio de drayage. El máximo autorizado es 9,000 MXN
 y el pickup debe ser el 3 de septiembre de 2026. No aceptes cambios de
 precio o pickup sin reevaluar el mandato.
@@ -250,7 +250,7 @@ Solamente después de esa confirmación, el agente ejecuta `createOperation` exa
 ```json
 {
   "customerName": "Textiles Pacífico E2E <runId>",
-  "containerNumber": "TCLU<runId>",
+  "containerNumber": "<containerCode>",
   "origin": "Puerto de Manzanillo",
   "destination": "Guadalajara",
   "service": "DRAYAGE",
@@ -587,7 +587,7 @@ El participante dice:
 
 ```text
 Soy Juan, conductor de Transportes Atlas. Llamo por el contenedor
-TCLU<runId>, de Manzanillo a Guadalajara.
+<containerCode>, de Manzanillo a Guadalajara.
 ```
 
 Respuesta esperada:
@@ -738,7 +738,7 @@ Respuesta esperada:
 El conductor dice:
 
 ```text
-Soy Juan de Transportes Atlas. Confirmo que recogí el contenedor TCLU<runId>
+Soy Juan de Transportes Atlas. Confirmo que recogí el contenedor <containerCode>
 en el Puerto de Manzanillo a las 10:00 del 3 de septiembre de 2026.
 ```
 
@@ -789,13 +789,13 @@ Guardar la misma call como `operatorClosureCallId` y `deliveryCallId`.
 El operador dice:
 
 ```text
-Soy el operador autorizado. Quiero cerrar la orden del contenedor TCLU<runId>.
+Soy el operador autorizado. Quiero cerrar la orden del contenedor <containerCode>.
 ```
 
 El agente consulta el estado oficial y debe responder con una pregunta explícita equivalente a:
 
 ```text
-Antes de cerrarla necesito confirmación: ¿el contenedor TCLU<runId> ya fue
+Antes de cerrarla necesito confirmación: ¿el contenedor <containerCode> ya fue
 entregado físicamente en Guadalajara? Indícame fecha, hora, quién confirma
 y si hubo daños o faltantes.
 ```
@@ -821,7 +821,7 @@ Una intención de cierre, una ETA, “debería haber llegado”, “probablement
 Después de que el agente vuelva a solicitar confirmación, el operador dice:
 
 ```text
-Confirmo que el contenedor TCLU<runId> fue entregado físicamente en Guadalajara
+Confirmo que el contenedor <containerCode> fue entregado físicamente en Guadalajara
 el 3 de septiembre de 2026 a las 22:00. Yo, Gabriel, operador autorizado,
 confirmo la entrega sin daños ni faltantes y solicito cerrar la operación.
 ```

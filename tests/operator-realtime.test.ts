@@ -75,7 +75,7 @@ describe("Authorized operator Realtime flow", () => {
       () =>
         realtime.executeTool(session.id, "createOperation", {
           customerName: "Textiles Pacífico",
-          containerNumber: "ABCD1234567",
+          containerNumber: "1234",
           origin: "Manzanillo",
           destination: "Guadalajara",
           weightKg: 18_000,
@@ -98,14 +98,14 @@ describe("Authorized operator Realtime flow", () => {
       source: "CALLER_AUDIO",
       startMs: 400,
       endMs: 600,
-      text: "El contenedor correcto es T, C, L, U, uno, uno, dos, dos, tres, tres, cuatro.",
+      text: "El código correcto del contenedor es uno, uno, dos, dos.",
       final: true,
       interrupted: false,
     });
 
     await realtime.executeTool(session.id, "createOperation", {
       customerName: "Textiles Pacífico",
-      containerNumber: "t, c, l, u, 1, 1, 2, 2, 3, 3, 4",
+      containerNumber: "1, 1, 2, 2",
       origin: "Manzanillo",
       destination: "Guadalajara",
       weightKg: 18_000,
@@ -122,7 +122,7 @@ describe("Authorized operator Realtime flow", () => {
         name: "createOperation",
         arguments: {
           customerName: "Textiles Pacífico",
-          containerNumber: "TCLU1122334",
+          containerNumber: "1122",
           origin: "Manzanillo",
           destination: "Guadalajara",
           weightKg: 18_000,
@@ -255,7 +255,7 @@ describe("Authorized operator Realtime flow", () => {
     await assert.rejects(
       () =>
         realtime.executeTool(session.id, "getOperationStatus", {
-          containerNumber: "ABCD1234567",
+          containerNumber: "1234",
         }),
       (error: unknown) =>
         error instanceof ApiError &&
@@ -269,12 +269,12 @@ describe("Authorized operator Realtime flow", () => {
       source: "CALLER_AUDIO",
       startMs: 100,
       endMs: 140,
-      text: "El contenedor es T, C, L, U, uno, dos, tres, cuatro, cinco, seis, siete.",
+      text: "El código del contenedor es uno, dos, tres, cuatro.",
       final: true,
       interrupted: false,
     });
     await realtime.executeTool(session.id, "getOperationStatus", {
-      containerNumber: "TCLU-E2E",
+      containerNumber: "1234",
     });
     const deliverySession = await realtime.getActiveByCallId(session.callId);
     assert.equal(deliverySession?.mode, "DELIVERY");

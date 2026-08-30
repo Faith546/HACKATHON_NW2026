@@ -35,7 +35,7 @@ function fixture() {
       'car_1', 'Atlas', 'Ana', '+525500000001', NULL, 90, 1, '2026-08-29T00:00:00Z'
     );
     INSERT INTO operations VALUES (
-      'op_1', 'Textiles', 'TCLU1234567', 'Manzanillo', 'Guadalajara',
+      'op_1', 'Textiles', '1234', 'Manzanillo', 'Guadalajara',
       'DRAYAGE', 'SOURCING', NULL, NULL, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'
     );
     INSERT INTO negotiations VALUES (

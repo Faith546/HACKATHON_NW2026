@@ -425,7 +425,7 @@ async function createMarketContext(baseUrl: string, scores: number[]) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       customerName: "Market Test",
-      containerNumber: `MARKET-${randomUUID()}`,
+      containerNumber: randomUUID().replace(/\D/g, "").padEnd(4, "0").slice(0, 4),
       origin: "Manzanillo",
       destination: "Guadalajara",
       service: "DRAYAGE",

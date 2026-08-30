@@ -216,7 +216,7 @@ Content-Type: application/json
 {
   "summary": "Atlas cotizó 8,500 MXN para pickup el 3 de septiembre.",
   "outcome": "QUOTE_OBTAINED",
-  "mentions": ["TCLU1234567", "8,500 MXN", "2026-09-03"],
+  "mentions": ["1234", "8,500 MXN", "2026-09-03"],
   "objections": [],
   "actions": ["Quote registrada"],
   "nextSteps": ["Esperar selección de mercado"]

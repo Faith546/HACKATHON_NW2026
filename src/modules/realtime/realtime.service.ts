@@ -636,7 +636,7 @@ function assertExplicitVoiceAuthorization(
         : commitmentRejected
           ? "La última intervención humana rechazó o pospuso el acuerdo."
           : operationRejected
-            ? "El contenedor requiere una confirmación afirmativa después de repetirlo carácter por carácter."
+            ? "El código de cuatro dígitos del contenedor requiere una confirmación afirmativa."
           : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
       { tool: name },
     );

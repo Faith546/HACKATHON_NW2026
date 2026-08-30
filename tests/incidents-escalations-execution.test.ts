@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 import express from "express";
 import { eq } from "drizzle-orm";
@@ -820,7 +821,7 @@ function seedOperation(
   database.insert(operations).values({
     id: input.operationId,
     customerName: "Textiles Pacífico",
-    containerNumber: `CONT_${input.operationId}`,
+    containerNumber: randomUUID().replace(/\D/g, "").padEnd(4, "0").slice(0, 4),
     origin: "Manzanillo",
     destination: "Guadalajara",
     service: "DRAYAGE",
