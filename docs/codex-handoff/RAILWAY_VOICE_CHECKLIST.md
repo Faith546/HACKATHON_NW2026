@@ -4,8 +4,8 @@ No contiene secretos. Confirmar cada punto en Railway antes de una llamada real.
 
 - [ ] El deployment usa el SHA exacto revisado de la branch Voice; anotar SHA y fecha.
 - [ ] Root Directory apunta a la raíz de `HACKATHON_NW2026` (donde vive `package.json`).
-- [ ] Start Command: `npm start` (`tsx src/server.ts`).
-- [ ] Migration/Pre-deploy Command: `npm run db:migrate`.
+- [ ] Start Command: `npm run db:migrate && npm start`. Railway no monta volúmenes durante Pre-deploy; la migración SQLite debe ejecutarse al iniciar el contenedor que tiene el volumen.
+- [ ] Pre-deploy Command vacío para SQLite en volumen.
 - [ ] Antes del merge, resolver `JOINT_BACKEND`: esta branch y `origin/feat/business-rules` contienen migraciones `0002` distintas; no desplegar ambas sin reconciliarlas.
 - [ ] `HOST=0.0.0.0`; el código aún usa `127.0.0.1` como default local.
 - [ ] `PORT` lo inyecta Railway; el default local es `3000`.
