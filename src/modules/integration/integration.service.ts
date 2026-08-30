@@ -257,9 +257,26 @@ export class IntegrationService {
           operationId?: string;
           containerNumber?: string;
         };
-        const operation = await this.operationsService.resolveOperationReference(
-          reference,
-        );
+        let operation: OperationResponse;
+        try {
+          operation = await this.operationsService.resolveOperationReference(
+            reference,
+          );
+        } catch (error) {
+          if (
+            error instanceof ApiError &&
+            error.status === 404 &&
+            reference.containerNumber
+          ) {
+            return {
+              found: false,
+              requestedContainerNumber: reference.containerNumber,
+              possibleContainerNumbers:
+                error.details?.possibleContainerNumbers ?? [],
+            };
+          }
+          throw error;
+        }
         await this.requireCallsService().bindOperationContext(
           input.context.callId,
           {

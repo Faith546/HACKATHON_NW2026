@@ -29,7 +29,10 @@ describe("Authorized operator Realtime flow", () => {
       toNumber: "+525500000000",
       purpose: "OPERATIONS",
     });
-    const executed: string[] = [];
+    const executions: Array<{
+      name: string;
+      arguments: Record<string, unknown>;
+    }> = [];
     const voiceCore: VoiceCorePort = {
       resolveOutboundCallContext: async () => ({ toNumber: "+525500000001" }),
       resolveInboundCallContext: async () => ({
@@ -40,8 +43,8 @@ describe("Authorized operator Realtime flow", () => {
         purpose: "OPERATIONS",
       }),
       getActiveMandate: async () => null,
-      executeVoiceTool: async ({ name }) => {
-        executed.push(name);
+      executeVoiceTool: async ({ name, arguments: toolArguments }) => {
+        executions.push({ name, arguments: toolArguments });
         return { ok: true };
       },
     };
@@ -70,7 +73,7 @@ describe("Authorized operator Realtime flow", () => {
 
     await realtime.executeTool(session.id, "createOperation", {
       customerName: "Textiles Pacífico",
-      containerNumber: "TCLU-RELAXED",
+      containerNumber: "t, c, l, u, 1, 1, 2, 2, 3, 3, 4",
       origin: "Manzanillo",
       destination: "Guadalajara",
       weightKg: 18_000,
@@ -82,7 +85,24 @@ describe("Authorized operator Realtime flow", () => {
       },
     });
 
-    assert.equal(executed.includes("createOperation"), true);
+    assert.deepEqual(executions, [
+      {
+        name: "createOperation",
+        arguments: {
+          customerName: "Textiles Pacífico",
+          containerNumber: "TCLU1122334",
+          origin: "Manzanillo",
+          destination: "Guadalajara",
+          weightKg: 18_000,
+          service: "DRAYAGE",
+          mandate: {
+            maxTotalPrice: 9000,
+            currency: "MXN",
+            pickupDate: "2026-09-03",
+          },
+        },
+      },
+    ]);
   });
 
   it("rejects a carrier Realtime session without business context", async () => {

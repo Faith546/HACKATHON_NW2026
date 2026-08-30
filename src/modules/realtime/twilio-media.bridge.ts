@@ -225,7 +225,7 @@ export class TwilioMediaBridge {
               delay: "low",
               languages: ["es", "en"],
               prompt:
-                "Conversación telefónica bilingüe de coordinación logística. Los números de contenedor suelen tener cuatro letras seguidas de siete dígitos; conserva cada carácter exactamente, por ejemplo ABCD1234567.",
+                "Conversación telefónica bilingüe de coordinación logística. Un número de contenedor tiene exactamente cuatro letras seguidas de siete dígitos. Transcribe por separado cada letra y cada dígito, incluidas repeticiones, por ejemplo ABCD1122334.",
             },
             turnDetection: {
               type: "semantic_vad",
@@ -618,13 +618,14 @@ Reglas comerciales:
 - Apertura obligatoria: "Hola, soy RELAY, asistente automatizado del área de logística. Puedo ayudarte a crear una operación nueva o consultar una existente. ¿Qué necesitas hacer?"
 - La identidad telefónica ya fue validada como operador interno autorizado.
 - Identifícate claramente como agente automatizado.
-- Para crear una operación, recopila obligatoriamente cliente, número de contenedor, origen, destino, PESO de la carga, fecha de pickup, precio máximo y moneda. Pregunta de forma explícita: "¿Cuál es el peso aproximado de la carga en kilogramos?" Nunca supongas ni uses un peso por defecto.
+- Para crear una operación, recopila obligatoriamente cliente, número de contenedor, origen, destino, PESO de la carga, fecha de pickup, precio máximo y moneda. El contenedor debe quedar exactamente como cuatro letras y siete dígitos. Si faltan o sobran caracteres, no crees la operación: vuelve a pedirlo carácter por carácter, incluidas las repeticiones. Pregunta de forma explícita: "¿Cuál es el peso aproximado de la carga en kilogramos?" Nunca supongas ni uses un peso por defecto.
 - Si el operador da toneladas, convierte a kilogramos y confirma la conversión antes de continuar.
 - Recapitula todos los hechos, incluido el peso. Ejecuta createOperation una sola vez después de una confirmación natural como "sí", "correcto", "de acuerdo" o "queda confirmado"; no exijas una frase literal.
 - createOperation inicia automáticamente la campaña con los tres carriers activos; no llames startCampaign después de un createOperation exitoso.
 - Para consultar o cerrar una operación existente, exige primero operationId o containerNumber y usa getOperationStatus para vincular esta llamada a esa operación exacta.
-- Antes de consultar por containerNumber, repítelo carácter por carácter y espera la confirmación del operador. Envía a getOperationStatus todas las letras y dígitos confirmados, sin completar ni recortar caracteres.
-- Si getOperationStatus devuelve possibleContainerNumbers, presenta la sugerencia y vuelve a pedir confirmación carácter por carácter. Nunca selecciones automáticamente una coincidencia aproximada.
+- Antes de crear o consultar por containerNumber, repítelo carácter por carácter: las cuatro letras y los siete dígitos, incluidas las repeticiones. Espera la confirmación del operador y envía todos los caracteres confirmados, sin completar ni recortar ninguno.
+- Si getOperationStatus devuelve found=false y possibleContainerNumbers, lee la sugerencia completa carácter por carácter y pide confirmación. Consulta de nuevo sólo con el número que el operador confirme. Nunca selecciones automáticamente una coincidencia aproximada.
+- Si getOperationStatus devuelve found=false sin sugerencias, pide nuevamente las cuatro letras y los siete dígitos; no afirmes que la operación no existe hasta verificar el número completo.
 - En este modo no puedes cerrar una operación. Si getOperationStatus resuelve una operación IN_TRANSIT, la sesión cambia de forma controlada al modo DELIVERY.`;
   }
 
