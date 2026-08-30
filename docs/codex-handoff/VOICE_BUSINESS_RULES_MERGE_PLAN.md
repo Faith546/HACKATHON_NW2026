@@ -8,7 +8,7 @@
 
 ## Qué aportaba cada frente
 
-Voice, antes de reconciliar `0002_round_pestilence.sql` y ahora `0003_silent_chronomancer.sql`:
+Voice, antes de reconciliar `0002_round_pestilence.sql` y ahora `0003_illegal_kingpin.sql`:
 
 - crea `call_timing_events` y su índice por call/created_at;
 - agrega a `calls`: `twilio_stream_sid`, `recording_sid`, `recording_status`, `recording_url` y `recording_duration_seconds`;
@@ -39,9 +39,9 @@ No se eligió un lado completo: se conservaron ambas conductas.
 1. Se hizo merge de `origin/main` dentro de `feat/voice-main-hardening`; no se modificó `main`.
 2. Se conservaron los cambios TypeScript de ambos frentes.
 3. `0002_perpetual_thunderbolts.sql`, su journal y snapshot permanecen como la migración Business Rules.
-4. La identidad anterior `0002` de Voice se retiró y Drizzle generó `0003_silent_chronomancer.sql` con snapshot y journal coherentes.
-5. Se corrigió únicamente la sintaxis inválida del índice descendente de `0002`; no se cambió su regla de negocio.
-6. El schema combinado contiene `weightKg`, `BEST_WEIGHT_PRICE_RATIO`, columnas Voice, `call_timing_events` y grounding de quote.
+4. La identidad anterior `0002` de Voice se retiró y Drizzle generó `0003_illegal_kingpin.sql` con snapshot y journal coherentes.
+5. La copia de datos de `calls` usa `actor_type='CARRIER'` para filas preexistentes, porque el snapshot de `main` ya declaraba esa columna aunque su SQL `0002` no la creaba.
+6. El schema combinado contiene `weightKg`, `BEST_WEIGHT_PRICE_RATIO`, `actorType`, columnas Voice, `call_timing_events` y grounding de quote.
 7. Se validaron dos caminos en SQLite desechable: base vacía `0000→0001→0002 Business→0003 Voice`, y base existente hasta `0002 Business→0003 Voice`.
 8. Typecheck, todos los tests, OpenAPI/parity y `git diff --check` deben permanecer verdes antes del merge a `main`.
 

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "94689ef2-6809-4281-b9ce-ccecafe051f6",
+  "id": "ef428c41-1bad-4c38-930d-137b058a620c",
   "prevId": "c177eb56-2ef0-46fc-a1f0-f3f14798361e",
   "tables": {
     "audit_events": {
@@ -268,7 +268,7 @@
           "name": "operation_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "carrier_id": {
@@ -284,6 +284,14 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "actor_type": {
+          "name": "actor_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'CARRIER'"
         },
         "twilio_call_sid": {
           "name": "twilio_call_sid",
@@ -432,7 +440,7 @@
           "name": "idx_calls_operation_created",
           "columns": [
             "operation_id",
-            "\"created_at\" desc"
+            "created_at"
           ],
           "isUnique": false
         },
@@ -492,6 +500,10 @@
         "ck_calls_direction": {
           "name": "ck_calls_direction",
           "value": "\"calls\".\"direction\" IN ('OUTBOUND', 'INBOUND')"
+        },
+        "ck_calls_actor_type": {
+          "name": "ck_calls_actor_type",
+          "value": "\"calls\".\"actor_type\" IN ('INTERNAL_OPERATOR', 'CARRIER', 'DISPATCHER', 'DRIVER')"
         },
         "ck_calls_purpose": {
           "name": "ck_calls_purpose",
@@ -578,7 +590,7 @@
           "name": "idx_campaigns_operation",
           "columns": [
             "operation_id",
-            "\"created_at\" desc"
+            "created_at"
           ],
           "isUnique": false
         }
@@ -1946,21 +1958,6 @@
     "columns": {}
   },
   "internal": {
-    "indexes": {
-      "idx_calls_operation_created": {
-        "columns": {
-          "\"created_at\" desc": {
-            "isExpression": true
-          }
-        }
-      },
-      "idx_campaigns_operation": {
-        "columns": {
-          "\"created_at\" desc": {
-            "isExpression": true
-          }
-        }
-      }
-    }
+    "indexes": {}
   }
 }

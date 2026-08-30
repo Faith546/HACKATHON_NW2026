@@ -16,6 +16,7 @@ function createDatabase() {
       operation_id TEXT NOT NULL,
       carrier_id TEXT,
       negotiation_id TEXT,
+      actor_type TEXT NOT NULL DEFAULT 'CARRIER',
       twilio_call_sid TEXT UNIQUE,
       twilio_stream_sid TEXT UNIQUE,
       recording_sid TEXT UNIQUE,

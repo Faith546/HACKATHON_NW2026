@@ -189,6 +189,9 @@ function parseBrief(raw: string | null): CallBrief | null {
 }
 
 function toCall(row: CallRow): Call {
+  if (row.operationId === null) {
+    throw new Error(`Call ${row.id} has no operation context`);
+  }
   return {
     id: row.id,
     operationId: row.operationId,

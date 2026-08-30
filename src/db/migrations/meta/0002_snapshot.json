@@ -282,7 +282,7 @@
           "name": "idx_calls_operation_created",
           "columns": [
             "operation_id",
-            "\"created_at\" desc"
+            "created_at"
           ],
           "isUnique": false
         },
@@ -428,7 +428,7 @@
           "name": "idx_campaigns_operation",
           "columns": [
             "operation_id",
-            "\"created_at\" desc"
+            "created_at"
           ],
           "isUnique": false
         }
@@ -1768,21 +1768,6 @@
     "columns": {}
   },
   "internal": {
-    "indexes": {
-      "idx_calls_operation_created": {
-        "columns": {
-          "\"created_at\" desc": {
-            "isExpression": true
-          }
-        }
-      },
-      "idx_campaigns_operation": {
-        "columns": {
-          "\"created_at\" desc": {
-            "isExpression": true
-          }
-        }
-      }
-    }
+    "indexes": {}
   }
 }
