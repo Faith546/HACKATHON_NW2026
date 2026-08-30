@@ -57,3 +57,20 @@ npm run validate:openapi
 La integración funcional de Twilio PSTN y OpenAI Realtime vive en [`relay/apps/server`](relay/apps/server).
 
 Consulta [`relay/README.md`](relay/README.md) para configuración, ejecución y responsabilidades del servicio.
+
+# Raily: asistente de consulta logística
+
+El frontend puede consultar a Raily mediante `POST /api/relay-llm/chat`. La clave de OpenAI nunca se expone al cliente: el backend obtiene el contexto operativo desde su propia base de datos y llama al proveedor.
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/relay-llm/chat \
+  -H "content-type: application/json" \
+  -d '{"message":"¿Qué mandatorios tienen retraso?","operationId":"op_123"}'
+```
+
+`conversationId` y `operationId` son opcionales. En esta primera versión `conversationId` se acepta como identificador opaco, pero no se persiste ni se usa como fuente de contexto. El resultado tiene la forma `{"reply":"...","inScope":true}`. Las consultas ajenas a Relay/logística devuelven `inScope: false` y una respuesta fija.
+
+Variables necesarias:
+
+- `CHAT_FRONTEND_API_KEY`: requerida para consultas dentro del alcance.
+- `CHAT_FRONTEND_MODEL`: opcional; por defecto `gpt-4.1-mini`.

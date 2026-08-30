@@ -20,6 +20,7 @@ servers:
     description: Servidor local de la demo
 tags:
   - name: System
+  - name: Raily
   - name: Operations
   - name: Mandates
   - name: Carriers
@@ -36,6 +37,45 @@ tags:
   - name: Webhooks
 
 paths:
+  /relay-llm/chat:
+    post:
+      tags: [Raily]
+      operationId: chatWithRaily
+      summary: Consultar la operación logística con Raily
+      description: >-
+        Endpoint de solo consulta. El backend construye el contexto desde la
+        base de datos; no acepta contexto operativo del frontend ni ejecuta acciones.
+      servers:
+        - url: http://127.0.0.1:3000/api
+          description: Prefijo del endpoint de Raily
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RelayLlmChatRequest"
+      responses:
+        "200":
+          description: Respuesta breve de Raily
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RelayLlmChatResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "502":
+          description: El proveedor del modelo no está disponible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Raily no está configurado en este entorno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /health:
     get:
       tags: [System]
@@ -921,6 +961,32 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    RelayLlmChatRequest:
+      type: object
+      required: [message]
+      additionalProperties: false
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          example: ¿Qué mandatorios tienen retraso?
+        conversationId:
+          type: string
+          maxLength: 128
+        operationId:
+          type: string
+          maxLength: 128
+
+    RelayLlmChatResponse:
+      type: object
+      required: [reply, inScope]
+      properties:
+        reply:
+          type: string
+        inScope:
+          type: boolean
+
     Health:
       type: object
       required: [status, service]

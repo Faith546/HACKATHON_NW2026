@@ -18,6 +18,10 @@ import {
   notFoundHandler,
 } from "./shared/http/error-handler";
 import { requestContext } from "./shared/http/request-context";
+import {
+  createRelayLlmRouter,
+} from "./modules/relay-llm/relay-llm.routes";
+import type { RelayLlmService } from "./modules/relay-llm/relay-llm.service";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(currentDirectory, "..");
@@ -27,6 +31,7 @@ export interface CreateAppOptions {
   apiPrefix?: string;
   core?: CreateCoreRouterOptions;
   voice?: CreateVoiceRouterOptions;
+  relayLlmService?: RelayLlmService;
 }
 
 export function createApp(options: CreateAppOptions = {}): Express {
@@ -62,6 +67,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
 
   app.use(apiPrefix, createCoreRouter(options.core));
   app.use(apiPrefix, createVoiceRouter({ runtime: voiceRuntime }));
+  app.use("/api/relay-llm", createRelayLlmRouter(options.relayLlmService));
 
   app.use(notFoundHandler);
   app.use(errorHandler);
