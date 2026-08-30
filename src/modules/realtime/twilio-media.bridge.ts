@@ -5,6 +5,7 @@ import {
   RealtimeSession as OpenAIRealtimeSession,
   tool,
   type RealtimeItem,
+  type RealtimeTransportLayer,
 } from "@openai/agents/realtime";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { z } from "zod";
@@ -154,6 +155,11 @@ export class TwilioMediaBridge {
       rawTimestampMs: Date.now(),
       metadata: { callSid: identity.callSid },
     });
+    const logContext =
+      `internalCallId=${callId} callSid=${maskSid(identity.callSid)} ` +
+      `streamSid=${maskSid(identity.streamSid)}`;
+    console.info(`[VOICE_WS] connected ${logContext}`);
+    console.info(`[TWILIO_STREAM] started ${logContext}`);
     const sessionContext = await this.realtimeService.create({
       callId,
       actorType: call.actorType,
@@ -316,10 +322,21 @@ export class TwilioMediaBridge {
         console.error("[TIMING_PERSISTENCE_FAILED]", error);
       });
     };
-    webSocket.once("close", () => void close().catch(reportCloseFailure));
+    webSocket.once("close", () => {
+      console.info(`[VOICE_WS] closed ${logContext}`);
+      void close().catch(reportCloseFailure);
+    });
     webSocket.once("error", () => void close().catch(reportCloseFailure));
 
     openAiSession.on("transport_event", (event) => {
+      if (event.type === "session.created") {
+        console.info(`[REALTIME] session_created ${logContext}`);
+        return;
+      }
+      if (event.type === "session.updated") {
+        console.info(`[REALTIME] session_updated ${logContext}`);
+        return;
+      }
       if (
         event.type === "input_audio_buffer.speech_started" ||
         event.type === "input_audio_buffer.speech_stopped"
@@ -335,7 +352,8 @@ export class TwilioMediaBridge {
             itemId: speechEvent.item_id,
           });
           console.info(
-            `[TIMING] caller speech started\\nClock: openai_input\\nItemId: ${speechEvent.item_id}\\nStart: ${speechEvent.audio_start_ms}`,
+            `[REALTIME] caller_speech_started ${logContext} ` +
+            `itemId=${speechEvent.item_id} atMs=${speechEvent.audio_start_ms}`,
           );
         } else {
           recordTiming({
@@ -347,7 +365,8 @@ export class TwilioMediaBridge {
             itemId: speechEvent.item_id,
           });
           console.info(
-            `[TIMING] caller speech stopped\\nClock: openai_input\\nItemId: ${speechEvent.item_id}\\nEnd: ${speechEvent.audio_end_ms}`,
+            `[REALTIME] caller_speech_stopped ${logContext} ` +
+            `itemId=${speechEvent.item_id} atMs=${speechEvent.audio_end_ms}`,
           );
         }
         return;
@@ -355,16 +374,6 @@ export class TwilioMediaBridge {
 
       if (event.type !== "twilio_message") return;
       const message = event.message as TwilioMessage;
-      if (message.event === "connected") {
-        console.info("[TWILIO] connected");
-      }
-      if (message.event === "start") {
-        const providerCallId = message.start?.callSid;
-        const streamSid = message.start?.streamSid ?? message.streamSid;
-        console.info("[TWILIO] start");
-        console.info(`[TWILIO] CallSid: ${providerCallId ?? "unknown"}`);
-        console.info(`[TWILIO] StreamSid: ${streamSid ?? "unknown"}`);
-      }
       if (message.event === "media" && message.media && message.streamSid) {
         if (!firstTwilioMediaSeen) {
           firstTwilioMediaSeen = true;
@@ -386,14 +395,33 @@ export class TwilioMediaBridge {
           eventType: "MEDIA_STREAM_STOP_OBSERVED",
           rawTimestampMs: Date.now(),
         });
-        console.info("[TWILIO] stop");
+        console.info(`[TWILIO_STREAM] stopped ${logContext}`);
         void close().catch(reportCloseFailure);
       }
+    });
+    let firstAudioChunkPending = true;
+    openAiSession.on("agent_start", () => {
+      firstAudioChunkPending = true;
+      console.info(`[REALTIME] response_started ${logContext}`);
+    });
+    openAiSession.on("audio_start", () => {
+      console.info(`[REALTIME] assistant_audio_started ${logContext}`);
+    });
+    openAiSession.on("audio", (event) => {
+      if (!firstAudioChunkPending) return;
+      firstAudioChunkPending = false;
+      console.info(
+        `[TWILIO_STREAM] assistant_audio_sent ${logContext} bytes=${event.data.byteLength}`,
+      );
+    });
+    openAiSession.on("agent_end", () => {
+      console.info(`[REALTIME] response_done ${logContext}`);
     });
     openAiSession.on("history_updated", (history) => {
       for (const item of history) observe(item);
     });
     openAiSession.on("audio_interrupted", () => {
+      console.info(`[REALTIME] audio_interrupted ${logContext}`);
       const latestAgentItem = [...openAiSession.history]
         .reverse()
         .find(
@@ -404,13 +432,33 @@ export class TwilioMediaBridge {
         );
       if (latestAgentItem) observe(latestAgentItem, true);
     });
-    openAiSession.on("error", () => {
+    openAiSession.on("error", (event) => {
+      console.error(
+        `[REALTIME] error ${logContext} ${safeErrorSummary(event.error)}`,
+      );
       void close().catch(reportCloseFailure);
       webSocket.close(1011, "OpenAI Realtime error");
     });
 
+    console.info(
+      `[REALTIME] connecting ${logContext} ` +
+      `model=${this.config.model ?? "gpt-realtime"} voice=${this.config.voice ?? "ash"}`,
+    );
     await openAiSession.connect({ apiKey: this.config.apiKey });
+    console.info(`[REALTIME] connected ${logContext}`);
+    requestInitialAgentResponse(openAiSession.transport);
+    console.info(`[REALTIME] initial_response_requested ${logContext}`);
   }
+}
+
+export function requestInitialAgentResponse(
+  transport: RealtimeTransportLayer,
+): void {
+  if (transport.requestResponse) {
+    transport.requestResponse();
+    return;
+  }
+  transport.sendEvent({ type: "response.create" });
 }
 
 export function validateTwilioStartContext(
@@ -530,6 +578,7 @@ Idiomas:
 
 Estilo:
 - Usa respuestas cortas, naturales, directas y profesionales.
+- Al iniciar la conexión, saluda brevemente, identifícate como RELAY y abre con una sola pregunta pertinente al modo actual.
 - No uses fillers ni frases de chatbot como "déjame pensar", "let me think", "got it".
 - No expliques procesos internos, backend, tools, validaciones o razonamiento al transportista.
 - Ejemplos naturales: "Perfecto. Entonces son ocho mil quinientos pesos, todo incluido."; "¿Ese precio incluye combustible y maniobras?".
@@ -586,6 +635,18 @@ Reglas comerciales:
 
 function stableToolSet(tools: VoiceToolName[]): string {
   return [...tools].sort().join(",");
+}
+
+function maskSid(value: string): string {
+  return `***${value.slice(-4)}`;
+}
+
+function safeErrorSummary(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  if (error && typeof error === "object" && "message" in error) {
+    return String(error.message);
+  }
+  return "Unknown Realtime error";
 }
 
 function transcriptText(item: RealtimeItem): string | null {
