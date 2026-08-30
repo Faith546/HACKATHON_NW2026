@@ -5,14 +5,40 @@ import { CallsService } from "../src/modules/calls/calls.service";
 import type { VoiceCorePort } from "../src/modules/voice/voice-core.port";
 import { InMemoryRealtimeSessionRepository } from "../src/modules/realtime/realtime.repository";
 import { RealtimeService } from "../src/modules/realtime/realtime.service";
+import { instructionsForSession } from "../src/modules/realtime/twilio-media.bridge";
 import {
   realtimeActorTypes,
   realtimeModes,
+  type RealtimeSession,
 } from "../src/modules/realtime/realtime.types";
 import { InMemoryJobQueue } from "../src/shared/queue/in-memory-job-queue";
 import { ApiError } from "../src/shared/http/api-error";
 
 describe("RealtimeService", () => {
+  it("keeps the operator on logistics and makes weight explicitly mandatory", () => {
+    const instructions = instructionsForSession({
+      id: "rts_instructions",
+      callId: "call_instructions",
+      operationId: null,
+      carrierId: null,
+      negotiationId: null,
+      actorType: "INTERNAL_OPERATOR",
+      agent: "OPERATIONS_AGENT",
+      mode: "OPERATIONS",
+      mandateId: null,
+      allowedTools: ["createOperation"],
+      status: "ACTIVE",
+      transcriptSegments: [],
+      createdAt: "2026-08-30T00:00:00.000Z",
+      closedAt: null,
+    } satisfies RealtimeSession);
+
+    assert.match(instructions, /no respondas ese contenido/i);
+    assert.match(instructions, /repite de inmediato la última pregunta pendiente/i);
+    assert.match(instructions, /peso aproximado de la carga en kilogramos/i);
+    assert.match(instructions, /Nunca supongas ni uses un peso por defecto/i);
+  });
+
   it("transfers only the call whose carrier explicitly requests a human", async () => {
     const queue = new InMemoryJobQueue();
     let nextCall = 0;
