@@ -36,7 +36,7 @@ describe("Campaigns and negotiation lifecycle", () => {
     );
   });
 
-  it("requires three explicit active carriers and schedules their calls", async () => {
+  it("schedules calls for every explicitly selected active carrier", async () => {
     const operation = await createOperation(baseUrl);
     const carrierIds = await Promise.all([
       createCarrier(baseUrl, 91),
@@ -113,11 +113,11 @@ describe("Campaigns and negotiation lifecycle", () => {
     assert.deepEqual(await getResponse.json(), ready);
   });
 
-  it("rejects duplicates, too few carriers and cross-operation campaign reads", async () => {
+  it("rejects duplicate carriers and cross-operation campaign reads", async () => {
     const operation = await createOperation(baseUrl);
     const otherOperation = await createOperation(baseUrl);
     const carrierId = await createCarrier(baseUrl, 80);
-    const tooFew = await fetch(
+    const duplicates = await fetch(
       `${baseUrl}/api/v1/operations/${operation.id}/campaigns`,
       {
         method: "POST",
@@ -125,7 +125,7 @@ describe("Campaigns and negotiation lifecycle", () => {
         body: JSON.stringify({ carrierIds: [carrierId, carrierId, carrierId] }),
       },
     );
-    assert.equal(tooFew.status, 422);
+    assert.equal(duplicates.status, 422);
 
     const carrierIds = await Promise.all([
       createCarrier(baseUrl, 80),

@@ -37,6 +37,16 @@ describe("voice tool schemas", () => {
     assert.equal(parsed.currency, "MXN");
   });
 
+  it("allows Voice to start a campaign with one carrier", () => {
+    assert.equal(
+      voiceToolParameterSchemas.startCampaign.safeParse({
+        carrierIds: ["car_only"],
+        maxParallelCalls: 1,
+      }).success,
+      true,
+    );
+  });
+
   it("requires weight when Voice creates an operation", () => {
     const operation = {
       customerName: "Textiles Pacífico",

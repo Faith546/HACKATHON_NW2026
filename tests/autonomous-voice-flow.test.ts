@@ -41,7 +41,7 @@ describe("Autonomous voice sourcing orchestration", () => {
       },
     });
     const carrierRows = await Promise.all(
-      ["Atlas", "Norte", "Pacifico"].map((name, index) =>
+      ["Atlas"].map((name, index) =>
         carriersService.createCarrier({
           name: `${name} ${suffix}`,
           dispatcherName: `${name} Dispatcher`,
@@ -91,9 +91,9 @@ describe("Autonomous voice sourcing orchestration", () => {
         .from(negotiations)
         .where(eq(negotiations.campaignId, campaign.id))
         .all();
-      assert.equal(negotiationRows.length, 3);
+      assert.equal(negotiationRows.length, 1);
 
-      const prices = [8_500, 9_300, 8_800];
+      const prices = [8_500];
       let lastQuoteCreatedAt = "";
       for (const [index, negotiation] of negotiationRows.entries()) {
         const quote = await marketService.recordQuote(negotiation.id, {

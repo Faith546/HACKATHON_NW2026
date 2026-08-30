@@ -18,7 +18,7 @@ function campaignSchema(minimumCarriers: number) {
   });
 }
 
-export const CreateCampaignSchema = campaignSchema(3);
+export const CreateCampaignSchema = campaignSchema(1);
 export const CreateCampaignHttpSchema = campaignSchema(1);
 
 export type CreateCampaignInput = z.infer<typeof CreateCampaignHttpSchema>;
