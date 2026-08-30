@@ -1,22 +1,27 @@
 import { z } from "zod";
 import type { campaigns } from "../../db/schema";
 
-export const CreateCampaignSchema = z.object({
-  carrierIds: z
-    .array(z.string().trim().min(1))
-    .min(3)
-    .superRefine((carrierIds, context) => {
-      if (new Set(carrierIds).size !== carrierIds.length) {
-        context.addIssue({
-          code: "custom",
-          message: "carrierIds no puede contener duplicados.",
-        });
-      }
-    }),
-  maxParallelCalls: z.number().int().min(1).max(3).default(3),
-});
+function campaignSchema(minimumCarriers: number) {
+  return z.object({
+    carrierIds: z
+      .array(z.string().trim().min(1))
+      .min(minimumCarriers)
+      .superRefine((carrierIds, context) => {
+        if (new Set(carrierIds).size !== carrierIds.length) {
+          context.addIssue({
+            code: "custom",
+            message: "carrierIds no puede contener duplicados.",
+          });
+        }
+      }),
+    maxParallelCalls: z.number().int().min(1).max(3).default(3),
+  });
+}
 
-export type CreateCampaignInput = z.infer<typeof CreateCampaignSchema>;
+export const CreateCampaignSchema = campaignSchema(3);
+export const CreateCampaignHttpSchema = campaignSchema(1);
+
+export type CreateCampaignInput = z.infer<typeof CreateCampaignHttpSchema>;
 
 export interface CampaignProgress {
   completedNegotiations: number;
