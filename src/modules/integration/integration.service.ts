@@ -6,6 +6,7 @@ import {
   carriers,
   negotiations,
   operations,
+  quotes,
 } from "../../db/schema";
 import { and, desc, eq, inArray, like } from "drizzle-orm";
 import { ApiError } from "../../shared/http/api-error";
@@ -91,6 +92,23 @@ interface InboundContextResolver {
   }): Promise<InboundCallResolution>;
 }
 
+type DelayedTaskScheduler = (
+  task: () => Promise<void> | void,
+  delayMs: number,
+) => void;
+
+const commitCallDelayAfterLastQuoteMs = 2 * 60 * 1_000;
+
+function scheduleDelayedTask(
+  task: () => Promise<void> | void,
+  delayMs: number,
+): void {
+  const timer = setTimeout(() => {
+    void task();
+  }, delayMs);
+  timer.unref();
+}
+
 export interface IntegrationServiceDependencies {
   operationsService?: OperationsService;
   mandatesService?: MandatesService;
@@ -104,6 +122,8 @@ export interface IntegrationServiceDependencies {
   callsService?: CallsService;
   inboundContextResolver?: InboundContextResolver;
   humanEscalationPhone?: string | null;
+  now?: () => Date;
+  scheduleDelayedTask?: DelayedTaskScheduler;
 }
 
 /**
@@ -126,8 +146,11 @@ export class IntegrationService {
   private readonly callsService?: CallsService;
   private readonly inboundContextResolver: InboundContextResolver;
   private readonly humanEscalationPhone: string | null;
+  private readonly now: () => Date;
+  private readonly scheduleDelayedTask: DelayedTaskScheduler;
   private readonly advancingOperations = new Map<string, Promise<unknown>>();
   private readonly creatingOperations = new Map<string, Promise<unknown>>();
+  private readonly scheduledCommitOperations = new Set<string>();
 
   constructor(dependencies: IntegrationServiceDependencies = {}) {
     this.operationsService =
@@ -154,6 +177,9 @@ export class IntegrationService {
       dependencies.humanEscalationPhone?.trim() ||
       process.env.HUMAN_ESCALATION_PHONE?.trim() ||
       null;
+    this.now = dependencies.now ?? (() => new Date());
+    this.scheduleDelayedTask =
+      dependencies.scheduleDelayedTask ?? scheduleDelayedTask;
   }
 
   async resolveInboundCall(phoneNumber: string) {
@@ -740,6 +766,38 @@ export class IntegrationService {
       operationId,
       "COMMIT",
     );
+    const latestQuoteAt = latestQuoteReceivedAt(campaign.id);
+    if (!latestQuoteAt) {
+      throw new ApiError(
+        500,
+        "CAMPAIGN_QUOTE_INVARIANT_VIOLATION",
+        "La campaña completada no tiene una cotización para programar la llamada de confirmación.",
+        { operationId, campaignId: campaign.id },
+      );
+    }
+    const latestQuoteTime = Date.parse(latestQuoteAt);
+    if (!Number.isFinite(latestQuoteTime)) {
+      throw new ApiError(
+        500,
+        "CAMPAIGN_QUOTE_TIMESTAMP_INVALID",
+        "La última cotización no tiene una fecha válida.",
+        { operationId, campaignId: campaign.id, latestQuoteAt },
+      );
+    }
+    const commitCallNotBefore = new Date(
+      latestQuoteTime + commitCallDelayAfterLastQuoteMs,
+    ).toISOString();
+    const remainingDelayMs =
+      Date.parse(commitCallNotBefore) - this.now().getTime();
+    if (!existingCall && remainingDelayMs > 0) {
+      this.scheduleCommitCall(operationId, remainingDelayMs);
+      return {
+        selection: { winningQuoteId, carrierId },
+        commitment: toCommitmentResponse(commitment),
+        commitCall: null,
+        commitCallScheduledFor: commitCallNotBefore,
+      };
+    }
     const commitCall =
       existingCall ??
       (await callsService.enqueueOutbound({
@@ -752,6 +810,24 @@ export class IntegrationService {
       commitment: toCommitmentResponse(commitment),
       commitCall,
     };
+  }
+
+  private scheduleCommitCall(operationId: string, delayMs: number): void {
+    if (this.scheduledCommitOperations.has(operationId)) return;
+    this.scheduledCommitOperations.add(operationId);
+    process.stdout.write(
+      `[COMMIT_CALL] scheduled operationId=${operationId} delayMs=${delayMs}\n`,
+    );
+    this.scheduleDelayedTask(async () => {
+      this.scheduledCommitOperations.delete(operationId);
+      try {
+        await this.advanceAutonomousFlow(operationId);
+      } catch (error) {
+        process.stderr.write(
+          `[COMMIT_CALL] failed operationId=${operationId} message=${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      }
+    }, delayMs);
   }
 
   private requireCallsService(): CallsService {
@@ -888,6 +964,22 @@ function latestCampaignForOperation(operationId: string) {
       .orderBy(desc(campaigns.createdAt), desc(campaigns.id))
       .limit(1)
       .get() ?? null
+  );
+}
+
+function latestQuoteReceivedAt(campaignId: string): string | null {
+  return (
+    db
+      .select({ createdAt: quotes.createdAt })
+      .from(quotes)
+      .innerJoin(
+        negotiations,
+        eq(quotes.negotiationId, negotiations.id),
+      )
+      .where(eq(negotiations.campaignId, campaignId))
+      .orderBy(desc(quotes.createdAt), desc(quotes.id))
+      .limit(1)
+      .get()?.createdAt ?? null
   );
 }
 

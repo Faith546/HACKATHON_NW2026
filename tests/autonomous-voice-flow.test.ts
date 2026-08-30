@@ -25,7 +25,7 @@ import { DrizzleVoiceCoreAdapter } from "../src/modules/voice/drizzle-voice-core
 import { InMemoryJobQueue } from "../src/shared/queue/in-memory-job-queue";
 
 describe("Autonomous voice sourcing orchestration", () => {
-  it("selects, authorizes and enqueues COMMIT exactly once", async () => {
+  it("waits two minutes after the last quote before enqueuing COMMIT exactly once", async () => {
     const suffix = randomUUID();
     const operation = await operationsService.createOperation({
       customerName: `Autonomous ${suffix}`,
@@ -66,9 +66,19 @@ describe("Autonomous voice sourcing orchestration", () => {
         resolve: (input) => voiceCore.resolveOutboundCallContext(input),
       },
     });
+    let currentTime = new Date();
+    let scheduledDelayMs: number | null = null;
+    let scheduledTask: (() => Promise<void> | void) | null = null;
+    let scheduleCount = 0;
     const integration = new IntegrationService({
       campaignsService: campaignService,
       callsService,
+      now: () => currentTime,
+      scheduleDelayedTask: (task, delayMs) => {
+        scheduleCount += 1;
+        scheduledTask = task;
+        scheduledDelayMs = delayMs;
+      },
     });
 
     try {
@@ -84,20 +94,22 @@ describe("Autonomous voice sourcing orchestration", () => {
       assert.equal(negotiationRows.length, 3);
 
       const prices = [8_500, 9_300, 8_800];
+      let lastQuoteCreatedAt = "";
       for (const [index, negotiation] of negotiationRows.entries()) {
-        await marketService.recordQuote(negotiation.id, {
+        const quote = await marketService.recordQuote(negotiation.id, {
           totalPrice: prices[index],
           currency: "MXN",
           pickupDate: "2026-09-03",
           validUntil: "2099-09-02T18:00:00.000Z",
         });
+        lastQuoteCreatedAt = quote.createdAt;
       }
+      currentTime = new Date(lastQuoteCreatedAt);
 
       await Promise.all([
         integration.advanceAutonomousFlow(operation.id),
         integration.advanceAutonomousFlow(operation.id),
       ]);
-      await queue.onIdle();
       await integration.advanceAutonomousFlow(operation.id);
 
       const completedCampaign = db
@@ -124,8 +136,32 @@ describe("Autonomous voice sourcing orchestration", () => {
         )
         .all();
       assert.equal(commitmentCount, 1);
-      assert.equal(commitCalls.length, 1);
-      assert.match(commitCalls[0].twilioCallSid ?? "", /^CA_AUTO_/);
+      assert.equal(commitCalls.length, 0);
+      assert.equal(scheduledDelayMs, 120_000);
+      assert.equal(scheduleCount, 1);
+
+      currentTime = new Date(currentTime.getTime() + 120_000);
+      const task = scheduledTask as (() => Promise<void> | void) | null;
+      assert.ok(task);
+      await task();
+      await queue.onIdle();
+      await integration.advanceAutonomousFlow(operation.id);
+
+      const dispatchedCommitCalls = db
+        .select()
+        .from(calls)
+        .where(
+          and(
+            eq(calls.operationId, operation.id),
+            eq(calls.purpose, "COMMIT"),
+          ),
+        )
+        .all();
+      assert.equal(dispatchedCommitCalls.length, 1);
+      assert.match(
+        dispatchedCommitCalls[0].twilioCallSid ?? "",
+        /^CA_AUTO_/,
+      );
     } finally {
       db.delete(auditEvents)
         .where(eq(auditEvents.operationId, operation.id))
