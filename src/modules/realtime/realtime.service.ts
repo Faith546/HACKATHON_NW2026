@@ -298,8 +298,7 @@ export class RealtimeService {
         : parsedArguments;
     const transcriptEvidence =
       name === "recordVerbalAgreement" ||
-      name === "createOperation" ||
-      name === "confirmDelivery"
+      name === "createOperation"
         ? latestTranscriptEvidence(session)
         : name === "attachCommitmentEvidence"
           ? {
@@ -559,17 +558,6 @@ function assertExplicitVoiceAuthorization(
   if (name === "recordVerbalAgreement") {
     accepted =
       !/\b(no acept\w*|rechaz\w*|no confirm\w*|no estoy de acuerdo|no queda confirmado|aun no|todavia no|dejame|luego|despues|voy a confirmar)\b/.test(
-        text,
-      );
-  } else if (name === "confirmDelivery") {
-    accepted =
-      (/\b(entreg\w*|recibid\w*|ya llego|llego bien|entrega completada)\b/.test(
-        text,
-      ) ||
-        /\b(si|claro|correcto|exacto|confirmo|de acuerdo|esta bien|ok|okay)\b/.test(
-          text,
-        )) &&
-      !/\b(no se entreg\w*|no ha lleg\w*|aun no|todavia no|deberia|probablemente|tal vez|quiza|manana|va a llegar)\b/.test(
         text,
       );
   }
