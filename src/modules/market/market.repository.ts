@@ -474,12 +474,13 @@ export class MarketRepository {
         );
       }
 
-      const ranked = this.rankQuotes(eligible, input.strategy);
+      const ranked = this.rankQuotes(eligible, input.strategy, operation.weightKg);
       const winner = ranked[0];
       const explanation = this.selectionExplanation(
         winner,
         input.strategy,
         ranked.length,
+        operation.weightKg
       );
 
       tx.update(campaigns)
@@ -687,6 +688,7 @@ export class MarketRepository {
   private rankQuotes(
     candidates: RankedQuote[],
     strategy: MarketStrategy,
+    weightKg: number
   ): RankedQuote[] {
     const lowestPrice = Math.min(
       ...candidates.map((candidate) => candidate.quote.totalPriceCents),
@@ -706,6 +708,13 @@ export class MarketRepository {
       ) {
         return right.balancedScore - left.balancedScore;
       }
+      if (strategy === "BEST_WEIGHT_PRICE_RATIO") {
+        const leftRatio = weightKg / (left.quote.totalPriceCents / 100);
+        const rightRatio = weightKg / (right.quote.totalPriceCents / 100);
+        if (leftRatio !== rightRatio) {
+          return rightRatio - leftRatio; // Mayor eficiencia primero
+        }
+      }
       if (left.quote.totalPriceCents !== right.quote.totalPriceCents) {
         return left.quote.totalPriceCents - right.quote.totalPriceCents;
       }
@@ -723,9 +732,14 @@ export class MarketRepository {
     winner: RankedQuote,
     strategy: MarketStrategy,
     comparedCount: number,
+    weightKg: number
   ): string {
     if (strategy === "BALANCED_SCORE") {
       return `Ganó ${winner.quote.id} entre ${comparedCount} cotizaciones vigentes con score balanceado ${winner.balancedScore.toFixed(4)} (70% eficiencia de precio y 30% score del carrier).`;
+    }
+    if (strategy === "BEST_WEIGHT_PRICE_RATIO") {
+      const ratio = weightKg / (winner.quote.totalPriceCents / 100);
+      return `Ganó ${winner.quote.id} por la mejor relación Kilos/Precio (${ratio.toFixed(2)} kg por ${winner.quote.currency}); los empates se resuelven por mayor score del carrier.`;
     }
     return `Ganó ${winner.quote.id} por el menor precio válido vigente (${winner.quote.totalPriceCents / 100} ${winner.quote.currency}); los empates se resuelven por mayor score del carrier y luego por recepción más temprana.`;
   }

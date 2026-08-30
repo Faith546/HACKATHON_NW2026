@@ -53,6 +53,7 @@ export const CreateOperationSchema = z.object({
   containerNumber: z.string().trim().min(1),
   origin: z.string().trim().min(1),
   destination: z.string().trim().min(1),
+  weightKg: z.number().int().positive().optional().default(10000),
   service: z.literal("DRAYAGE"),
   mandate: CreateMandateInputSchema,
   notes: z.string().trim().min(1).optional(),

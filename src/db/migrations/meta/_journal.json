@@ -15,6 +15,13 @@
       "when": 1788051819312,
       "tag": "0001_organic_dagger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788060148166,
+      "tag": "0002_perpetual_thunderbolts",
+      "breakpoints": true
     }
   ]
 }
