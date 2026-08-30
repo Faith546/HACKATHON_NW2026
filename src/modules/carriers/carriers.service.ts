@@ -14,10 +14,6 @@ export class CarriersService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes("UNIQUE constraint failed: carriers.phone")) {
-        const restored = carrierRepository.restoreInactive(input);
-        if (restored) {
-          return toCarrierResponse(restored);
-        }
         throw new ApiError(
           409,
           "DUPLICATE_CARRIER_PHONE",
