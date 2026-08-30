@@ -298,20 +298,22 @@ export class RealtimeService {
         : parsedArguments;
     const transcriptEvidence =
       name === "recordVerbalAgreement" ||
-      name === "createOperation" ||
-      name === "confirmDelivery" ||
-      name === "requestEscalation"
+        name === "createOperation" ||
+        (name === "getOperationStatus" &&
+          !session.operationId &&
+          typeof parsedArguments.containerNumber === "string") ||
+        name === "requestEscalation"
         ? latestTranscriptEvidence(session)
         : name === "attachCommitmentEvidence"
           ? {
-              startMs: trustedArguments.startMs as number,
-              endMs: trustedArguments.endMs as number,
-              transcriptExcerpt:
-                trustedArguments.transcriptExcerpt as string,
-            }
+            startMs: trustedArguments.startMs as number,
+            endMs: trustedArguments.endMs as number,
+            transcriptExcerpt:
+              trustedArguments.transcriptExcerpt as string,
+          }
           : undefined;
-    if (transcriptEvidence && name !== "createOperation") {
-      assertExplicitVoiceAuthorization(name, transcriptEvidence);
+    if (transcriptEvidence) {
+      assertExplicitVoiceAuthorization(name, transcriptEvidence, session);
     }
     const execute = () =>
       this.dependencies.voiceCore.executeVoiceTool({
@@ -329,7 +331,7 @@ export class RealtimeService {
       });
     if (!mutatingVoiceTools.has(name)) {
       const result = await execute();
-      await this.synchronizeOperatorContext(session, name, result);
+      await this.synchronizeSessionContext(session, name, result);
       return result;
     }
 
@@ -343,7 +345,7 @@ export class RealtimeService {
     executions.set(key, execution);
     try {
       const result = await execution;
-      await this.synchronizeOperatorContext(session, name, result);
+      await this.synchronizeSessionContext(session, name, result);
       return result;
     } catch (error) {
       if (executions.get(key) === execution) executions.delete(key);
@@ -430,11 +432,25 @@ export class RealtimeService {
     return session;
   }
 
-  private async synchronizeOperatorContext(
+  private async synchronizeSessionContext(
     session: RealtimeSession,
     name: VoiceToolName,
     _result: unknown,
   ): Promise<void> {
+    if (name === "confirmPickup" && session.operationId) {
+      await this.dependencies.callsService.bindOperationContext(
+        session.callId,
+        {
+          operationId: session.operationId,
+          purpose: "DELIVERY",
+        },
+      );
+      session.mode = "DELIVERY";
+      session.allowedTools = [...toolsByMode.DELIVERY];
+      await this.dependencies.repository.save(session);
+      return;
+    }
+
     if (
       session.actorType !== "INTERNAL_OPERATOR" ||
       (name !== "createOperation" && name !== "getOperationStatus")
@@ -553,53 +569,75 @@ function normalizeTranscriptText(value: string): string {
 
 function assertExplicitVoiceAuthorization(
   name: VoiceToolName,
-  evidence: { transcriptExcerpt: string },
+  evidence: { startMs: number; transcriptExcerpt: string },
+  session: RealtimeSession,
 ): void {
   const text = normalizeTranscriptText(evidence.transcriptExcerpt);
   let accepted = true;
-  if (name === "recordVerbalAgreement") {
+  if (name === "createOperation" || name === "getOperationStatus") {
+    const correction =
+      /\b(no|incorrecto|equivoc\w*|corrige\w*|cambia\w*|pero)\b/.test(text);
+    accepted = !correction;
+  } else if (name === "recordVerbalAgreement") {
     accepted =
       !/\b(no acept\w*|rechaz\w*|no confirm\w*|no estoy de acuerdo|no queda confirmado|aun no|todavia no|dejame|luego|despues|voy a confirmar)\b/.test(
         text,
       );
-  } else if (name === "confirmDelivery") {
-    accepted =
-      /\b(entreg\w*|recibid\w*|ya llego|llego bien|entrega completada)\b/.test(
-        text,
-      ) &&
-      !/\b(no se entreg\w*|no ha lleg\w*|aun no|todavia no|deberia|probablemente|tal vez|quiza|manana|va a llegar)\b/.test(
-        text,
-      );
   } else if (name === "requestEscalation") {
-    const transferIntent =
-      /\b(transfier\w*|transfer\w*|pas\w*|comunica\w*|conecta\w*|escal\w*|deriva\w*)\b/.test(
-        text,
-      ) ||
-      /\b(hablar|contactar|consultar)\b.{0,30}\b(con|a)\b/.test(
-        text,
-      ) ||
-      /\b(humano|persona|alguien mas|otra persona|operador|supervisor|encargado|representante|asesor|agente|jefe)\b/.test(
-        text,
-      );
     const denied =
-      /\b(no|nunca)\b.{0,30}\b(transfier\w*|transfer\w*|comunica\w*|conecta\w*|pas\w*|escal\w*|deriva\w*|hablar|contactar)\b/.test(
+      /\b(no|nunca)\b.{0,30}\b(transfier\w*|transfer\w*|comunica\w*|conecta\w*|pas\w*|hablar|contactar)\b/.test(
         text,
       );
-    accepted = transferIntent && !denied;
+    const explicitRequest =
+      /\b(transfier\w*|transfer\w*|pasame|pasenme|comunicame|conectame|escalame|derivame)\b/.test(
+        text,
+      ) ||
+      /\b(quiero|necesito|quisiera|puedo|podria|me gustaria)\b.{0,35}\b(hablar|contactar|consultar)\b.{0,30}\b(con|a)\b/.test(
+        text,
+      ) ||
+      /\b(quiero|necesito|prefiero)\b.{0,25}\b(humano|persona|operador|supervisor|representante|asesor)\b/.test(
+        text,
+      );
+    const previousAgentTurn = [...session.transcriptSegments]
+      .filter(
+        (segment) =>
+          segment.speaker === "AGENT" &&
+          segment.source === "AGENT_AUDIO" &&
+          segment.final &&
+          !segment.interrupted &&
+          segment.endMs <= evidence.startMs,
+      )
+      .sort((left, right) => right.endMs - left.endMs)[0];
+    const agentOfferedTransfer = previousAgentTurn
+      ? /\b(transfier\w*|transfer\w*|pasar\w*|comunicar\w*|conectar\w*|humano|persona|operador|supervisor|representante|asesor)\b/.test(
+        normalizeTranscriptText(previousAgentTurn.text),
+      )
+      : false;
+    const affirmativeReply =
+      /^(si|claro|por favor|adelante|de acuerdo|esta bien|correcto|exacto|ok|okay|hazlo)[.!\s]*$/.test(
+        text,
+      );
+    accepted =
+      !denied &&
+      (explicitRequest || (agentOfferedTransfer && affirmativeReply));
   }
   if (!accepted) {
     const transferRejected = name === "requestEscalation";
     const commitmentRejected = name === "recordVerbalAgreement";
+    const operationRejected =
+      name === "createOperation" || name === "getOperationStatus";
     throw new ApiError(
       409,
       transferRejected
         ? "EXPLICIT_HUMAN_TRANSFER_REQUEST_REQUIRED"
         : "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
       transferRejected
-        ? "La última intervención del caller no solicita explícitamente una transferencia humana."
+        ? "La llamada actual no contiene una solicitud de transferencia ni una respuesta afirmativa a una oferta del agente."
         : commitmentRejected
           ? "La última intervención humana rechazó o pospuso el acuerdo."
-          : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
+          : operationRejected
+            ? "El contenedor requiere una confirmación afirmativa después de repetirlo carácter por carácter."
+            : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
       { tool: name },
     );
   }

@@ -35,7 +35,10 @@ import {
   executionService as defaultExecutionService,
   type ExecutionService,
 } from "../execution/execution.service";
-import type { ConfirmExecutionEventInput } from "../execution/execution.types";
+import type {
+  ConfirmDeliveryInput,
+  ConfirmExecutionEventInput,
+} from "../execution/execution.types";
 import {
   incidentsService as defaultIncidentsService,
   type IncidentsService,
@@ -208,7 +211,7 @@ export class IntegrationService {
 
   confirmDelivery(
     operationId: string,
-    input: ConfirmExecutionEventInput,
+    input: ConfirmDeliveryInput,
     actorId?: string,
   ) {
     return this.executionService.confirmDelivery(operationId, input, actorId);
@@ -247,16 +250,33 @@ export class IntegrationService {
       case "getOperationStatus": {
         const operationId = input.context.operationId;
         if (operationId) {
-          return this.operationsService.getOperationStatus(operationId);
+          return this.getVoiceOperationStatus(operationId);
         }
         this.requireInternalOperator(input.context);
         const reference = args as {
           operationId?: string;
           containerNumber?: string;
         };
-        const operation = await this.operationsService.resolveOperationReference(
-          reference,
-        );
+        let operation: OperationResponse;
+        try {
+          operation = await this.operationsService.resolveOperationReference(
+            reference,
+          );
+        } catch (error) {
+          if (
+            error instanceof ApiError &&
+            error.status === 404 &&
+            reference.containerNumber
+          ) {
+            return {
+              found: false,
+              requestedContainerNumber: reference.containerNumber,
+              possibleContainerNumbers:
+                error.details?.possibleContainerNumbers ?? [],
+            };
+          }
+          throw error;
+        }
         await this.requireCallsService().bindOperationContext(
           input.context.callId,
           {
@@ -266,7 +286,7 @@ export class IntegrationService {
             actorType: "INTERNAL_OPERATOR",
           },
         );
-        return this.operationsService.getOperationStatus(operation.id);
+        return this.getVoiceOperationStatus(operation.id);
       }
       case "listCarriers":
         return this.carriersService.listCarriers();
@@ -453,7 +473,7 @@ export class IntegrationService {
         return this.executionService.confirmDelivery(
           requireOperationId(input.context),
           {
-            ...(args as Omit<ConfirmExecutionEventInput, "callId">),
+            ...(args as Omit<ConfirmDeliveryInput, "callId">),
             callId: input.context.callId,
           },
           actorId,
@@ -550,6 +570,14 @@ export class IntegrationService {
         { callId: context.callId },
       );
     }
+  }
+
+  private async getVoiceOperationStatus(operationId: string) {
+    const [status, quotes] = await Promise.all([
+      this.operationsService.getOperationStatus(operationId),
+      this.marketService.listOperationQuotes(operationId),
+    ]);
+    return { ...status, quotes };
   }
 
   private async createOperationAutonomously(

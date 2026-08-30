@@ -680,6 +680,7 @@ describe("Execution endpoints", () => {
             callId: "call_delivery",
             occurredAt: t1,
             confirmedBy: "Juan",
+            deliveryAddress: "Guadalajara",
           }),
         },
       );

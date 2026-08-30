@@ -148,8 +148,13 @@ export class OperationsService {
       });
     }
     if (containerNumber && !byContainer) {
+      const possibleContainerNumbers =
+        operationsRepository.findSimilarContainerNumbers(containerNumber);
       throw new ApiError(404, "RESOURCE_NOT_FOUND", "Operación no encontrada.", {
         containerNumber,
+        ...(possibleContainerNumbers.length > 0
+          ? { possibleContainerNumbers }
+          : {}),
       });
     }
     if (byId && byContainer && byId.operation.id !== byContainer.operation.id) {

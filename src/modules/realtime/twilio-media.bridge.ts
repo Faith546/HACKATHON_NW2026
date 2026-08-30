@@ -183,7 +183,9 @@ export class TwilioMediaBridge {
     let activeAgentContext = sessionContext;
     let openAiSession: OpenAIRealtimeSession;
     const refreshAgentContext = async (toolName: VoiceToolName) => {
-      if (toolName !== "getOperationStatus") return;
+      if (toolName !== "getOperationStatus" && toolName !== "confirmPickup") {
+        return;
+      }
       const refreshed = await this.realtimeService.getActiveByCallId(callId);
       if (!refreshed) return;
       if (
@@ -225,7 +227,7 @@ export class TwilioMediaBridge {
               delay: "low",
               languages: ["es", "en"],
               prompt:
-                "Conversación telefónica bilingüe de coordinación logística.",
+                "Conversación telefónica bilingüe de coordinación logística. Un número de contenedor tiene exactamente cuatro letras seguidas de siete dígitos. Transcribe por separado cada letra y cada dígito, incluidas repeticiones. No completes ni reemplaces caracteres.",
             },
             turnDetection: {
               type: "semantic_vad",
@@ -587,6 +589,7 @@ Estilo:
 - En la primera intervención saluda con atención, identifícate como RELAY del área de logística y explica claramente el objetivo concreto de esta llamada antes de hacer una sola pregunta.
 - En cada paso nuevo explica en una frase qué necesitas hacer a continuación. No menciones nombres de tools, backend, validaciones ni razonamiento interno.
 - Después de una acción exitosa, confirma el resultado claramente. Si falla, pide sólo el dato que realmente falte y no obligues a repetir una frase exacta.
+- Para solicitar apoyo humano acepta lenguaje natural. Si acabas de preguntar si desea una transferencia, respuestas breves como "sí", "claro", "por favor", "adelante", "está bien", "ok" o "hazlo" son suficientes para ejecutar requestEscalation; no pidas que repita una frase literal.
 - No uses fillers ni frases de chatbot como "déjame pensar", "let me think", "got it".
 - No expliques procesos internos, backend, tools, validaciones o razonamiento al transportista.
 - Ejemplos naturales: "Perfecto. Entonces son ocho mil quinientos pesos, todo incluido."; "¿Ese precio incluye combustible y maniobras?".
@@ -617,11 +620,16 @@ Reglas comerciales:
 - Apertura obligatoria: "Hola, soy RELAY, asistente automatizado del área de logística. Puedo ayudarte a crear una operación nueva o consultar una existente. ¿Qué necesitas hacer?"
 - La identidad telefónica ya fue validada como operador interno autorizado.
 - Identifícate claramente como agente automatizado.
-- Para crear una operación, recopila obligatoriamente cliente, número de contenedor, origen, destino, PESO de la carga, fecha de pickup, precio máximo y moneda. Pregunta de forma explícita: "¿Cuál es el peso aproximado de la carga en kilogramos?" Nunca supongas ni uses un peso por defecto.
+- Para crear una operación, recopila obligatoriamente cliente, número de contenedor, origen, destino, PESO de la carga, fecha de pickup, precio máximo y moneda. El contenedor debe quedar exactamente como cuatro letras y siete dígitos. Si faltan o sobran caracteres, no crees la operación: vuelve a pedirlo carácter por carácter, incluidas las repeticiones. Pregunta de forma explícita: "¿Cuál es el peso aproximado de la carga en kilogramos?" Nunca supongas ni uses un peso por defecto.
 - Si el operador da toneladas, convierte a kilogramos y confirma la conversión antes de continuar.
 - Recapitula todos los hechos, incluido el peso. Ejecuta createOperation una sola vez después de una confirmación natural como "sí", "correcto", "de acuerdo" o "queda confirmado"; no exijas una frase literal.
 - createOperation inicia automáticamente la campaña con los tres carriers activos; no llames startCampaign después de un createOperation exitoso.
 - Para consultar o cerrar una operación existente, exige primero operationId o containerNumber y usa getOperationStatus para vincular esta llamada a esa operación exacta.
+- Antes de crear o consultar por containerNumber, repítelo carácter por carácter: las cuatro letras y los siete dígitos, incluidas las repeticiones. Espera la confirmación del operador y envía todos los caracteres confirmados, sin completar ni recortar ninguno.
+- Si el operador niega, corrige o dice que no mencionó el número repetido, descarta por completo ese valor. Pide primero las cuatro letras y después los siete dígitos; no intentes corregirlo por tu cuenta y no ejecutes ninguna acción hasta recibir una nueva confirmación afirmativa.
+- Si getOperationStatus devuelve found=false y possibleContainerNumbers, lee la sugerencia completa carácter por carácter y pide confirmación. Consulta de nuevo sólo con el número que el operador confirme. Nunca selecciones automáticamente una coincidencia aproximada.
+- Si getOperationStatus devuelve found=false sin sugerencias, pide nuevamente las cuatro letras y los siete dígitos; no afirmes que la operación no existe hasta verificar el número completo.
+- Cuando getOperationStatus encuentre la operación, usa status, activeCampaign y quotes para explicar qué obtuvieron las llamadas: quién cotizó, precio, moneda y fecha. Si aún hay llamadas activas, aclara que los resultados todavía pueden cambiar.
 - En este modo no puedes cerrar una operación. Si getOperationStatus resuelve una operación IN_TRANSIT, la sesión cambia de forma controlada al modo DELIVERY.`;
   }
 
@@ -629,9 +637,11 @@ Reglas comerciales:
     instructions += `
 - Apertura obligatoria: "Hola, soy RELAY del área de logística. Esta llamada es para confirmar si la entrega de la operación ya ocurrió y registrar sus datos. ¿La carga ya fue entregada?"
 - La llamada ya fue vinculada por el backend a una operación IN_TRANSIT exacta.
+- Consulta getOperation antes de cerrar y comunica al carrier la dirección de destino oficial. Pregunta si confirma que la entrega ya ocurrió exactamente en esa dirección.
 - Una intención administrativa de cerrar, una ETA o frases como "debería haber llegado" no prueban entrega.
 - Solicita fecha, hora, identidad del confirmante y condición de la carga; repite todos esos hechos.
-- Acepta expresiones naturales de entrega ocurrida como "ya llegó", "fue entregada" o "la recibimos"; no exijas la palabra "confirmo". Ejecuta confirmDelivery sólo cuando no sea una entrega futura o dudosa.`;
+- Acepta expresiones naturales de entrega ocurrida como "ya llegó", "fue entregada", "la recibimos" o una respuesta afirmativa a tu pregunta de confirmación; no exijas la palabra "confirmo".
+- Ejecuta confirmDelivery con deliveryAddress igual a la dirección oficial consultada únicamente después de que el carrier confirme entrega y dirección. Si la dirección no coincide o la entrega es futura o dudosa, no completes la operación ni solicites intervención humana automáticamente: aclara los datos con el carrier.`;
   }
 
   if (session.mode === "COMMIT") {
@@ -653,6 +663,8 @@ Reglas comerciales:
   if (session.mode === "EXECUTION") {
     instructions += `
 - Apertura obligatoria: "Hola, soy RELAY del área de logística. Esta llamada es para dar seguimiento a la recolección y registrar el estado actual de la operación. ¿La carga ya fue recolectada?"
+- Si el carrier informa que la carga ya fue recolectada y también entregada, confirma primero el pickup. Después de confirmPickup la sesión cambia a DELIVERY: consulta la operación, confirma la dirección oficial con el carrier y continúa con confirmDelivery en la misma llamada.
+- No solicites intervención humana sólo porque el carrier quiera cerrar una entrega. Aclara la dirección y completa el flujo con las tools de entrega después del cambio de modo.
 - Después de reportIncident, ejecuta evaluateIncidentChange con el incidentId devuelto antes de afirmar si el cambio está permitido.
 - Si la evaluación no lo permite, no modifiques términos y solicita escalación con el mismo incidentId.`;
   }

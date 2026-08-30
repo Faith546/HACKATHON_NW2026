@@ -793,7 +793,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ConfirmExecutionEventRequest"
+              $ref: "#/components/schemas/ConfirmDeliveryRequest"
       responses:
         "200":
           description: Entrega confirmada
@@ -1779,6 +1779,16 @@ components:
           type: string
         notes:
           type: string
+
+    ConfirmDeliveryRequest:
+      allOf:
+        - $ref: "#/components/schemas/ConfirmExecutionEventRequest"
+        - type: object
+          required: [deliveryAddress]
+          properties:
+            deliveryAddress:
+              type: string
+              description: Dirección confirmada por el carrier; debe coincidir con destination.
 
     AuditEvent:
       type: object

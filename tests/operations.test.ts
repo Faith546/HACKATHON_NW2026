@@ -3,6 +3,8 @@ import { after, before, describe, it } from "node:test";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createApp } from "../src/app";
+import { operationsService } from "../src/modules/operations/operations.service";
+import { ApiError } from "../src/shared/http/api-error";
 
 describe("Operations OpenAPI contract", () => {
   let server: Server;
@@ -125,5 +127,46 @@ describe("Operations OpenAPI contract", () => {
       `${baseUrl}/api/v1/operations?status=NOT_A_STATUS`,
     );
     assert.equal(invalidList.status, 422);
+  });
+
+  it("recovers harmless container formatting but never auto-selects a missing character", async () => {
+    const digits = crypto.randomUUID().replace(/\D/g, "").padEnd(7, "0");
+    const containerNumber = `ABCD${digits.slice(0, 7)}`;
+    const operation = await operationsService.createOperation({
+      customerName: "Container recall test",
+      containerNumber,
+      origin: "Manzanillo",
+      destination: "Guadalajara",
+      weightKg: 18_000,
+      service: "DRAYAGE",
+      mandate: {
+        maxTotalPrice: 9_000,
+        currency: "MXN",
+        pickupDate: "2026-09-03",
+      },
+    });
+
+    const formatted = containerNumber
+      .toLowerCase()
+      .split("")
+      .join(" ");
+    const resolved = await operationsService.resolveOperationReference({
+      containerNumber: formatted,
+    });
+    assert.equal(resolved.id, operation.id);
+
+    const missingCharacter =
+      containerNumber.slice(0, 3) + containerNumber.slice(4);
+    await assert.rejects(
+      () =>
+        operationsService.resolveOperationReference({
+          containerNumber: missingCharacter,
+        }),
+      (error: unknown) =>
+        error instanceof ApiError &&
+        error.code === "RESOURCE_NOT_FOUND" &&
+        Array.isArray(error.details?.possibleContainerNumbers) &&
+        error.details.possibleContainerNumbers.includes(containerNumber),
+    );
   });
 });

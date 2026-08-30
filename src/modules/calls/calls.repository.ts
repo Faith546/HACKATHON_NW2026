@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { calls as callsTable } from "../../db/schema";
 import type * as databaseSchema from "../../db/schema";
@@ -32,6 +32,10 @@ export interface CallRepository {
     operationId: string,
     purpose: CallPurpose,
   ): Promise<Call | null>;
+  countByOperationPurpose(
+    operationId: string,
+    purpose: CallPurpose,
+  ): Promise<number>;
   setProviderCallId(callId: string, providerCallId: string): Promise<Call>;
   setStreamSid(callId: string, streamSid: string): Promise<Call>;
   setRecording(callId: string, patch: {
@@ -106,12 +110,22 @@ export class InMemoryCallRepository implements CallRepository {
     operationId: string,
     purpose: CallPurpose,
   ): Promise<Call | null> {
-    for (const call of this.callsById.values()) {
-      if (call.operationId === operationId && call.purpose === purpose) {
-        return cloneCall(call);
-      }
-    }
-    return null;
+    const matches = [...this.callsById.values()].filter(
+      (call) => call.operationId === operationId && call.purpose === purpose,
+    );
+    matches.sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
+    );
+    return matches[0] ? cloneCall(matches[0]) : null;
+  }
+
+  async countByOperationPurpose(
+    operationId: string,
+    purpose: CallPurpose,
+  ): Promise<number> {
+    return [...this.callsById.values()].filter(
+      (call) => call.operationId === operationId && call.purpose === purpose,
+    ).length;
   }
 
   async setProviderCallId(
@@ -335,10 +349,27 @@ export class DrizzleCallRepository implements CallRepository {
           eq(callsTable.purpose, purpose),
         ),
       )
-      .orderBy(callsTable.createdAt)
+      .orderBy(desc(callsTable.createdAt))
       .limit(1)
       .get();
     return row ? toCall(row) : null;
+  }
+
+  async countByOperationPurpose(
+    operationId: string,
+    purpose: CallPurpose,
+  ): Promise<number> {
+    const row = this.database
+      .select({ value: count() })
+      .from(callsTable)
+      .where(
+        and(
+          eq(callsTable.operationId, operationId),
+          eq(callsTable.purpose, purpose),
+        ),
+      )
+      .get();
+    return Number(row?.value ?? 0);
   }
 
   async setProviderCallId(

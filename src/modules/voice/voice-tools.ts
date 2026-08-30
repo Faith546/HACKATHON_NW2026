@@ -5,7 +5,10 @@ import {
   VerbalAgreementSchema,
 } from "../commitments/commitments.types";
 import { RequestEscalationSchema } from "../escalations/escalations.types";
-import { ConfirmExecutionEventSchema } from "../execution/execution.types";
+import {
+  ConfirmDeliverySchema,
+  ConfirmExecutionEventSchema,
+} from "../execution/execution.types";
 import {
   EvaluateChangeSchema,
   ReportIncidentSchema,
@@ -23,12 +26,19 @@ import {
 import type { VoiceToolName } from "./voice-core.port";
 
 const identifier = z.string().trim().min(1);
+const containerReference = identifier.describe(
+  "Número de contenedor confirmado carácter por carácter. Conserva todas las letras y dígitos; no completes ni elimines caracteres.",
+);
+const containerNumber = containerReference.regex(/^[A-Z]{4}[0-9]{7}$/, {
+  message:
+    "El contenedor debe tener exactamente cuatro letras y siete dígitos.",
+});
 const nonEmptyText = z.string().trim().min(1);
 const emptyArguments = z.object({}).strict();
 const operationReferenceArguments = z
   .object({
     operationId: identifier.optional(),
-    containerNumber: identifier.optional(),
+    containerNumber: containerReference.optional(),
   })
   .strict();
 const commitmentEvidenceArguments = z
@@ -60,6 +70,7 @@ const commitmentEvidenceArguments = z
   });
 
 const voiceCreateOperationSchema = CreateOperationSchema.extend({
+  containerNumber,
   weightKg: z.number().int().positive(),
 }).strict();
 
@@ -92,7 +103,7 @@ export const voiceToolSchemas = {
     requestedHumanPhone: true,
   }).strict(),
   confirmPickup: ConfirmExecutionEventSchema.omit({ callId: true }).strict(),
-  confirmDelivery: ConfirmExecutionEventSchema.omit({ callId: true }).strict(),
+  confirmDelivery: ConfirmDeliverySchema.omit({ callId: true }).strict(),
   saveCallBrief: z.object({
     summary: nonEmptyText,
     outcome: z.enum([
@@ -152,7 +163,7 @@ export const voiceToolDescriptions: Record<VoiceToolName, string> = {
   evaluateIncidentChange: "Evalúa el cambio propuesto contra el mandato activo.",
   requestEscalation: "Solicita que un humano se una a la llamada activa.",
   confirmPickup: "Confirma el pickup con evidencia de la llamada.",
-  confirmDelivery: "Confirma la entrega con evidencia de la llamada.",
+  confirmDelivery: "Confirma la entrega sólo cuando la dirección indicada por el carrier coincide con el destino oficial de la operación.",
   saveCallBrief: "Guarda el resumen estructurado de la llamada actual.",
 };
 
@@ -160,7 +171,18 @@ export function parseVoiceToolArguments(
   name: VoiceToolName,
   value: Record<string, unknown>,
 ): Record<string, unknown> {
-  const parsed = voiceToolSchemas[name].safeParse(value);
+  const containerValue = value.containerNumber;
+  const normalizedValue =
+    (name === "createOperation" || name === "getOperationStatus") &&
+    typeof containerValue === "string"
+      ? {
+          ...value,
+          containerNumber: containerValue
+            .replace(/[^A-Za-z0-9]/g, "")
+            .toUpperCase(),
+        }
+      : value;
+  const parsed = voiceToolSchemas[name].safeParse(normalizedValue);
   if (!parsed.success) {
     throw new ApiError(
       422,
