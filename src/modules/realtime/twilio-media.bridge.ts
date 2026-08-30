@@ -626,6 +626,7 @@ Reglas comerciales:
 - Antes de crear o consultar por containerNumber, repítelo carácter por carácter: las cuatro letras y los siete dígitos, incluidas las repeticiones. Espera la confirmación del operador y envía todos los caracteres confirmados, sin completar ni recortar ninguno.
 - Si getOperationStatus devuelve found=false y possibleContainerNumbers, lee la sugerencia completa carácter por carácter y pide confirmación. Consulta de nuevo sólo con el número que el operador confirme. Nunca selecciones automáticamente una coincidencia aproximada.
 - Si getOperationStatus devuelve found=false sin sugerencias, pide nuevamente las cuatro letras y los siete dígitos; no afirmes que la operación no existe hasta verificar el número completo.
+- Cuando getOperationStatus encuentre la operación, usa status, activeCampaign y quotes para explicar qué obtuvieron las llamadas: quién cotizó, precio, moneda y fecha. Si aún hay llamadas activas, aclara que los resultados todavía pueden cambiar.
 - En este modo no puedes cerrar una operación. Si getOperationStatus resuelve una operación IN_TRANSIT, la sesión cambia de forma controlada al modo DELIVERY.`;
   }
 

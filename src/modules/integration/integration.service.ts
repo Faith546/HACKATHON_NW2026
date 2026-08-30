@@ -250,7 +250,7 @@ export class IntegrationService {
       case "getOperationStatus": {
         const operationId = input.context.operationId;
         if (operationId) {
-          return this.operationsService.getOperationStatus(operationId);
+          return this.getVoiceOperationStatus(operationId);
         }
         this.requireInternalOperator(input.context);
         const reference = args as {
@@ -286,7 +286,7 @@ export class IntegrationService {
             actorType: "INTERNAL_OPERATOR",
           },
         );
-        return this.operationsService.getOperationStatus(operation.id);
+        return this.getVoiceOperationStatus(operation.id);
       }
       case "listCarriers":
         return this.carriersService.listCarriers();
@@ -570,6 +570,14 @@ export class IntegrationService {
         { callId: context.callId },
       );
     }
+  }
+
+  private async getVoiceOperationStatus(operationId: string) {
+    const [status, quotes] = await Promise.all([
+      this.operationsService.getOperationStatus(operationId),
+      this.marketService.listOperationQuotes(operationId),
+    ]);
+    return { ...status, quotes };
   }
 
   private async createOperationAutonomously(
