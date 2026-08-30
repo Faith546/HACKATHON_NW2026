@@ -68,7 +68,6 @@ if (runtimeMode === "twilio") {
   new TwilioMediaBridge(
     voiceRuntime.callsService,
     voiceRuntime.realtimeService,
-    voiceRuntime.recordingService,
     voiceRuntime.timingService,
     {
       apiKey: openAiApiKey,
@@ -81,6 +80,7 @@ if (runtimeMode === "twilio") {
 }
 
 server.listen(port, host, () => {
+  process.stdout.write(`Voice runtime: ${runtimeMode}\n`);
   process.stdout.write(`API: http://${host}:${port}/api/v1\n`);
   process.stdout.write(`Swagger UI: http://${host}:${port}/docs\n`);
   process.stdout.write(`OpenAPI YAML: http://${host}:${port}/openapi.yaml\n`);

@@ -11,7 +11,6 @@ import { z } from "zod";
 import twilio from "twilio";
 import { ApiError } from "../../shared/http/api-error";
 import type { CallsService } from "../calls/calls.service";
-import type { RecordingService } from "../recordings/recordings.service";
 import type { TimingService } from "../timing/timing.service";
 import type { VoiceToolName } from "../voice/voice-core.port";
 import {
@@ -54,7 +53,6 @@ export class TwilioMediaBridge {
   constructor(
     private readonly callsService: CallsService,
     private readonly realtimeService: RealtimeService,
-    private readonly recordingService: RecordingService,
     private readonly timingService: TimingService,
     private readonly config: TwilioMediaBridgeConfig,
   ) {}
@@ -64,14 +62,22 @@ export class TwilioMediaBridge {
       const url = new URL(request.url ?? "/", "http://localhost");
       const match = /^\/ws\/twilio-media\/([^/]+)$/.exec(url.pathname);
       if (!match) return;
+      const callId = decodeURIComponent(match[1]);
+      console.info(`[TWILIO_MEDIA] upgrade received callId=${callId}`);
       if (!this.hasValidTwilioSignature(request, url.pathname)) {
+        console.warn(`[TWILIO_MEDIA] invalid signature callId=${callId}`);
         socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
         socket.destroy();
         return;
       }
-      const callId = decodeURIComponent(match[1]);
       this.webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
-        void this.handleConnection(webSocket, callId).catch(() => {
+        void this.handleConnection(webSocket, callId).catch((error) => {
+          const details = error instanceof Error
+            ? `${error.name}: ${error.message}`
+            : String(error);
+          console.error(
+            `[TWILIO_MEDIA_BRIDGE_FAILED] callId=${callId} ${details}`,
+          );
           webSocket.close(1011, "Realtime bridge failed");
         });
       });
@@ -140,18 +146,6 @@ export class TwilioMediaBridge {
       identity.callSid,
       "IN_PROGRESS",
     );
-    await this.recordingService.start(callId);
-    await this.timingService.record({
-      callId,
-      streamSid: identity.streamSid,
-      clock: "recording",
-      eventType: "RECORDING_REQUEST_OBSERVED",
-      rawTimestampMs: Date.now(),
-      metadata: {
-        correlationStatus: "UNRESOLVED",
-        reason: "RECORDING_START_OFFSET_UNKNOWN",
-      },
-    });
     await this.timingService.record({
       callId,
       streamSid: identity.streamSid,

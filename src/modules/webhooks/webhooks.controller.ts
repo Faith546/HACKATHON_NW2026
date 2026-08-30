@@ -44,7 +44,13 @@ export class WebhooksController {
       To: required(parameters, "To"),
       CallStatus: parameters.CallStatus,
     };
+    console.info(
+      `[TWILIO_VOICE_WEBHOOK] received CallSid=${masked(body.CallSid)} From=${masked(body.From)}`,
+    );
     const twiml = await this.service.receiveVoice(body, twilioRequest);
+    console.info(
+      `[TWILIO_VOICE_WEBHOOK] accepted CallSid=${masked(body.CallSid)}`,
+    );
     response.status(200).type("text/xml").send(twiml);
   };
 
@@ -90,4 +96,9 @@ export class WebhooksController {
       parameters,
     };
   }
+}
+
+function masked(value: string): string {
+  const suffix = value.slice(-4);
+  return suffix ? `***${suffix}` : "***";
 }

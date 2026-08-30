@@ -20,7 +20,7 @@ export const notFoundHandler: RequestHandler = (request, _response, next) => {
 
 export const errorHandler: ErrorRequestHandler = (
   error: unknown,
-  _request,
+  request,
   response,
   _next,
 ) => {
@@ -63,6 +63,12 @@ export const errorHandler: ErrorRequestHandler = (
 
   if (apiError.details !== undefined) {
     body.details = apiError.details;
+  }
+
+  if (apiError.status >= 400) {
+    console.warn(
+      `[HTTP_ERROR] ${request.method} ${request.path} status=${apiError.status} code=${apiError.code}`,
+    );
   }
 
   response.status(apiError.status).json(body);
