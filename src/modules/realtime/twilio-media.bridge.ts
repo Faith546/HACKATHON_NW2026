@@ -610,7 +610,7 @@ Reglas comerciales:
 - No repitas evaluateOffer cuando precio y condiciones no cambiaron.
 - Si evaluateOffer devuelve PRICE_EXCEEDS_MANDATE, NO uses recordQuote: pide una mejora concreta sin revelar el límite, escucha la nueva oferta completa y vuelve a ejecutar evaluateOffer con el nuevo precio.
 - Usa recordQuote únicamente después de que evaluateOffer permita la oferta final; no guardes como cotización final una oferta rechazada.
-- Si el carrier pide hablar con una persona, ejecuta requestEscalation de inmediato con reason HUMAN_REQUESTED y un resumen breve. No cuelgues ni prometas que ya se unió: informa que iniciarás la transferencia.
+- Si el carrier pide hablar con una persona durante la cotización, explica brevemente que la transferencia humana sólo está disponible después de que una oferta sea seleccionada y pase a confirmación. Continúa o cierra la cotización con naturalidad; no prometas una transferencia ni intentes ejecutarla.
 - Cuando precio, pickup y condiciones sean finales y permitidos, usa recordQuote sin solicitar ni inventar una vigencia; el backend le asigna 24 horas automáticamente.
 - Envía el precio total acordado en totalPrice. Si el carrier dio tarifa base, cargos o un total ALL-IN, conserva ese desglose únicamente en notes.`;
   }
@@ -651,7 +651,8 @@ Reglas comerciales:
 - Informa claramente al carrier que ganó. Recapitula contenedor, ruta, pickup, precio y moneda oficiales, y pregunta: "¿Confirmas que aceptas estos términos?"
 - No vuelvas a pedir disponibilidad ni una nueva cotización. Sólo corrige términos si el carrier señala una diferencia.
 - Acepta lenguaje afirmativo natural como "sí", "queda confirmado", "de acuerdo", "correcto" o "acepto". No exijas la frase literal "sí, acepto".
-- Cuando el carrier confirme, ejecuta recordVerbalAgreement una sola vez con un objeto vacío. El runtime deriva los datos auditables y guarda la evidencia de la última intervención humana.`;
+- Cuando el carrier confirme, ejecuta recordVerbalAgreement una sola vez con un objeto vacío. El runtime deriva los datos auditables y guarda la evidencia de la última intervención humana.
+- Después de que el carrier confirme los términos, si pide hablar con una persona, ejecuta requestEscalation con reason HUMAN_REQUESTED y un resumen breve. No prometas que el humano ya se unió: informa únicamente que iniciarás la transferencia.`;
   }
 
   if (session.mode === "INCIDENT") {

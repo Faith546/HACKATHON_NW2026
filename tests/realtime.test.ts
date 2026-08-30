@@ -41,7 +41,7 @@ describe("RealtimeService", () => {
     assert.match(instructions, /Nunca selecciones automáticamente/i);
   });
 
-  it("transfers only the call whose carrier explicitly requests a human", async () => {
+  it("blocks human transfer during quotes and allows it in the confirmation call", async () => {
     const queue = new InMemoryJobQueue();
     let nextCall = 0;
     const calls = new CallsService({
@@ -61,6 +61,12 @@ describe("RealtimeService", () => {
         purpose: "QUOTE",
       });
     }
+    await calls.enqueueOutbound({
+      operationId: "op_1",
+      carrierId: "car_a",
+      negotiationId: "neg_a",
+      purpose: "COMMIT",
+    });
     await queue.onIdle();
 
     const transferredCalls: string[] = [];
@@ -135,7 +141,7 @@ describe("RealtimeService", () => {
       }),
       (error: unknown) =>
         error instanceof ApiError &&
-        error.code === "EXPLICIT_HUMAN_TRANSFER_REQUEST_REQUIRED",
+        error.code === "REALTIME_TOOL_FORBIDDEN",
     );
     await realtime.appendTranscriptSegment(sessions[0]!.id, {
       id: "agent_offers_transfer",
@@ -157,14 +163,22 @@ describe("RealtimeService", () => {
       final: true,
       interrupted: false,
     });
-    await realtime.executeTool(sessions[0]!.id, "requestEscalation", {
-      reason: "HUMAN_REQUESTED",
-      contextSummary: "Aceptó la transferencia ofrecida.",
-    });
-    await realtime.executeTool(sessions[1]!.id, "requestEscalation", {
-      reason: "HUMAN_REQUESTED",
-      contextSummary: "Pidió hablar con Luis.",
-    });
+    await assert.rejects(
+      () => realtime.executeTool(sessions[0]!.id, "requestEscalation", {
+        reason: "HUMAN_REQUESTED",
+        contextSummary: "Aceptó la transferencia ofrecida.",
+      }),
+      (error: unknown) =>
+        error instanceof ApiError && error.code === "REALTIME_TOOL_FORBIDDEN",
+    );
+    await assert.rejects(
+      () => realtime.executeTool(sessions[1]!.id, "requestEscalation", {
+        reason: "HUMAN_REQUESTED",
+        contextSummary: "Pidió hablar con Luis.",
+      }),
+      (error: unknown) =>
+        error instanceof ApiError && error.code === "REALTIME_TOOL_FORBIDDEN",
+    );
     await assert.rejects(
       () => realtime.executeTool(sessions[2]!.id, "requestEscalation", {
         reason: "HUMAN_REQUESTED",
@@ -172,10 +186,32 @@ describe("RealtimeService", () => {
       }),
       (error: unknown) =>
         error instanceof ApiError &&
-        error.code === "EXPLICIT_HUMAN_TRANSFER_REQUEST_REQUIRED",
+        error.code === "REALTIME_TOOL_FORBIDDEN",
     );
 
-    assert.deepEqual(transferredCalls, ["call_1", "call_2"]);
+    const commitSession = await realtime.create({
+      callId: "call_4",
+      carrierId: "car_a",
+      negotiationId: "neg_a",
+      actorType: "CARRIER",
+      mode: "COMMIT",
+    });
+    await realtime.appendTranscriptSegment(commitSession.id, {
+      id: "commit_transfer_request",
+      speaker: "HUMAN",
+      source: "CALLER_AUDIO",
+      startMs: 2_000,
+      endMs: 2_800,
+      text: "Ya confirmé los términos. Ahora pásame con una persona.",
+      final: true,
+      interrupted: false,
+    });
+    await realtime.executeTool(commitSession.id, "requestEscalation", {
+      reason: "HUMAN_REQUESTED",
+      contextSummary: "Confirmó los términos y solicitó hablar con una persona.",
+    });
+
+    assert.deepEqual(transferredCalls, ["call_4"]);
   });
 
   it("limits tools by mode and persists the transcript when closed", async () => {
@@ -238,7 +274,7 @@ describe("RealtimeService", () => {
 
     assert.equal(session.mandateId, "man_1");
     assert.equal(session.allowedTools.includes("recordQuote"), true);
-    assert.equal(session.allowedTools.includes("requestEscalation"), true);
+    assert.equal(session.allowedTools.includes("requestEscalation"), false);
     assert.equal(session.allowedTools.includes("createMandate"), false);
     await realtime.appendTranscriptSegment(session.id, {
       id: "turn_1",
