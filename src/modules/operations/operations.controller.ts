@@ -2,14 +2,14 @@ import type { Request, Response } from "express";
 import { operationsService } from "./operations.service";
 import {
   CancelOperationSchema,
-  CreateOperationSchema,
+  CreateOperationHttpSchema,
   ListOperationsQuerySchema,
 } from "./operations.types";
 import { ApiError } from "../../shared/http/api-error";
 
 export class OperationsController {
   async create(req: Request, res: Response) {
-    const parsed = CreateOperationSchema.safeParse(req.body);
+    const parsed = CreateOperationHttpSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new ApiError(
         422,
@@ -19,9 +19,11 @@ export class OperationsController {
       );
     }
 
+    const { carrierId, ...operationInput } = parsed.data;
     const operation = await operationsService.createOperation(
-      parsed.data,
+      operationInput,
       req.get("x-actor-id") ?? undefined,
+      carrierId,
     );
     res.status(201).json(operation);
   }

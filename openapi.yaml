@@ -54,7 +54,7 @@ paths:
       tags: [Operations]
       operationId: createOperation
       summary: Crear una operación de drayage con su mandato inicial
-      description: Lo llama el Operations Agent o la interfaz de demo. La operación y el mandato v1 se crean en una sola transacción.
+      description: Lo llama el Operations Agent o la interfaz de demo. La operación y el mandato v1 se crean en una sola transacción. Si se envía carrierId, se inicia además una campaña de una sola negociación dirigida a ese carrier.
       requestBody:
         required: true
         content:
@@ -70,6 +70,10 @@ paths:
                 $ref: "#/components/schemas/Operation"
         "422":
           $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
     get:
       tags: [Operations]
       operationId: listOperations
@@ -986,6 +990,10 @@ components:
           $ref: "#/components/schemas/CreateMandateRequest"
         notes:
           type: string
+        carrierId:
+          type: string
+          description: Carrier activo opcional al que se dirigirá una campaña de una sola negociación.
+          example: car_atlas
 
     Operation:
       allOf:

@@ -1,6 +1,8 @@
 import type { commitments, operations } from "../../db/schema";
 import { ApiError } from "../../shared/http/api-error";
 import { toCampaignResponse } from "../campaigns/campaigns.types";
+import { campaignsService } from "../campaigns/campaigns.service";
+import { carriersService } from "../carriers/carriers.service";
 import { toMandateResponse } from "../mandates/mandates.types";
 import { operationsRepository } from "./operations.repository";
 import type {
@@ -64,11 +66,39 @@ function toCommitmentResponse(commitment: CommitmentRow) {
 }
 
 export class OperationsService {
-  async createOperation(input: CreateOperationInput, actorId?: string) {
+  async createOperation(
+    input: CreateOperationInput,
+    actorId?: string,
+    carrierId?: string,
+  ) {
+    if (carrierId) {
+      const carrier = (await carriersService.listCarriers()).find(
+        (candidate) => candidate.id === carrierId,
+      );
+      if (!carrier) {
+        throw new ApiError(404, "RESOURCE_NOT_FOUND", "El carrier no existe.", {
+          carrierId,
+        });
+      }
+      if (!carrier.active) {
+        throw new ApiError(409, "CARRIER_INACTIVE", "El carrier está inactivo.", {
+          carrierId,
+        });
+      }
+    }
+
     const result = operationsRepository.createOperationWithMandate(
       input,
       actorId,
     );
+    if (carrierId) {
+      await campaignsService.startCampaign(
+        result.operation.id,
+        { carrierIds: [carrierId], maxParallelCalls: 1 },
+        actorId,
+      );
+      return this.getOperation(result.operation.id);
+    }
     return toOperationResponse(result.operation, result.mandate);
   }
 
