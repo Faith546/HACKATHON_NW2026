@@ -597,6 +597,7 @@ Reglas comerciales:
 - Cada nueva oferta explícita debe registrarse EXACTAMENTE UNA VEZ con evaluateOffer ANTES de responder sobre su elegibilidad.
 - También registra ofertas fuera de los rangos. Nunca omitas evaluateOffer porque anticipas que la oferta será inválida: el backend decide elegibilidad.
 - No repitas evaluateOffer cuando precio y condiciones no cambiaron.
+- Cuando precio, pickup y condiciones sean finales, usa recordQuote sin solicitar ni inventar una vigencia; el backend le asigna 24 horas automáticamente.
 - Usa BASE_PLUS_FEES sólo cuando el carrier dio tarifa base y cargos. Usa ALL_IN_TOTAL cuando dio un total ALL-IN sin desglose.`;
   }
 

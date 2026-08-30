@@ -120,7 +120,7 @@ export const voiceToolParameterSchemas = {
   evaluateOffer: EvaluateQuoteSchema.extend({
     currency: currencyInputSchema,
   }).strict(),
-  recordQuote: SaveQuoteSchema.omit({ callId: true })
+  recordQuote: SaveQuoteSchema.omit({ callId: true, validUntil: true })
     .extend({ currency: currencyInputSchema })
     .strict(),
 } satisfies Record<VoiceToolName, z.ZodType>;
@@ -136,7 +136,7 @@ export const voiceToolDescriptions: Record<VoiceToolName, string> = {
   cancelOperation: "Cancela la operación con una razón explícita y auditable.",
   getActiveMandate: "Consulta el mandato vigente sin modificarlo.",
   evaluateOffer: "Evalúa una oferta contra el mandato activo sin persistirla.",
-  recordQuote: "Registra la cotización final de la negociación y su vigencia.",
+  recordQuote: "Registra la cotización final; el backend asigna automáticamente 24 horas de vigencia.",
   reportNoAnswer: "Marca la negociación actual como no contestada.",
   getAuthorizedCommitment: "Consulta el único commitment activo autorizado.",
   recordVerbalAgreement: "Registra la aceptación verbal inequívoca del commitment.",

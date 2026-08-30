@@ -87,6 +87,8 @@ const mutatingVoiceTools = new Set<VoiceToolName>([
   "saveCallBrief",
 ]);
 
+const realtimeQuoteValidityMs = 24 * 60 * 60 * 1_000;
+
 export interface RealtimeServiceDependencies {
   repository: RealtimeSessionRepository;
   callsService: CallsService;
@@ -271,7 +273,16 @@ export class RealtimeService {
         { name, mode: session.mode },
       );
     }
-    const parsedArguments = parseVoiceToolArguments(name, argumentsValue);
+    const normalizedArguments =
+      name === "recordQuote" && argumentsValue.validUntil === undefined
+        ? {
+            ...argumentsValue,
+            validUntil: new Date(
+              this.now().getTime() + realtimeQuoteValidityMs,
+            ).toISOString(),
+          }
+        : argumentsValue;
+    const parsedArguments = parseVoiceToolArguments(name, normalizedArguments);
     const trustedArguments =
       name === "attachCommitmentEvidence"
         ? deriveTranscriptEvidence(session, parsedArguments)
