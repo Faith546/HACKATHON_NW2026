@@ -71,12 +71,12 @@ describe("SQLite migration baseline", () => {
       campaignIndexColumns.map((column) => column.name),
       ["operation_id", "created_at"],
     );
-    const preservedNegotiation = sqlite
+    const clearedNegotiation = sqlite
       .prepare(
         "SELECT campaign_id AS campaignId FROM negotiations WHERE id = ?",
       )
       .get("neg_migration") as { campaignId: string } | undefined;
-    assert.deepEqual(preservedNegotiation, { campaignId: "cmp_migration" });
+    assert.equal(clearedNegotiation, undefined);
     assert.deepEqual(sqlite.pragma("foreign_key_check"), []);
     const tracked = sqlite
       .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
@@ -95,10 +95,10 @@ describe("SQLite migration baseline", () => {
     sqlite.close();
   });
 
-  it("upgrades the current main database to Voice without losing calls", () => {
+  it("upgrades pre-Voice main to Voice without losing calls", () => {
     const sqlite = new Database(":memory:");
     const migrations = readMigrationFiles({ migrationsFolder });
-    assert.equal(migrations.length, 5);
+    assert.equal(migrations.length, 6);
     for (const migration of migrations.slice(0, 4)) {
       for (const statement of migration.sql) {
         if (statement.trim()) sqlite.exec(statement);

@@ -1,6 +1,6 @@
 import { ApiError } from "../../shared/http/api-error";
 import type { CallsService } from "../calls/calls.service";
-import type { CallStatus } from "../calls/calls.types";
+import type { Call, CallStatus } from "../calls/calls.types";
 import { createMediaStreamTwiml } from "../calls/twilio-twiml";
 import type { VoiceCorePort } from "../voice/voice-core.port";
 import type { RecordingService } from "../recordings/recordings.service";
@@ -57,6 +57,7 @@ export class WebhooksService {
         )
       ).call;
     }
+    assertInboundBusinessContext(call);
     const streamUrl = new URL(this.dependencies.publicWssUrl);
     if (streamUrl.protocol !== "wss:") {
       throw new ApiError(
@@ -163,4 +164,14 @@ export class WebhooksService {
       );
     }
   }
+}
+
+function assertInboundBusinessContext(call: Call): void {
+  if (call.operationId || call.actorType === "INTERNAL_OPERATOR") return;
+  throw new ApiError(
+    422,
+    "INBOUND_CONTEXT_UNRESOLVED",
+    "No hay una operación activa para el carrier entrante.",
+    { carrierId: call.carrierId },
+  );
 }

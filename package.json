@@ -12,6 +12,7 @@
     "validate:openapi": "swagger-cli validate openapi.yaml",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
+    "demo:seed": "tsx scripts/demo-seed.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },

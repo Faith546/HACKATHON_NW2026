@@ -105,6 +105,45 @@ describe("Twilio webhooks", () => {
     );
     assert.match(twiml, /ws\/twilio-media\/call_2/);
     assert.equal((await calls.getById("call_2")).direction, "INBOUND");
+
+    await calls.createOrGetInbound({
+      operationId: null,
+      actorType: "INTERNAL_OPERATOR",
+      providerCallId: "CA_OPERATOR",
+      fromNumber: "+525500009999",
+      toNumber: "+525500000002",
+      purpose: "OPERATIONS",
+    });
+    await webhooks.receiveStatus(
+      { CallSid: "CA_OPERATOR", CallStatus: "ringing" },
+      request,
+    );
+    assert.equal((await calls.findByProviderCallId("CA_OPERATOR"))?.status, "RINGING");
+
+    await calls.createOrGetInbound({
+      operationId: null,
+      carrierId: "car_orphan",
+      actorType: "CARRIER",
+      providerCallId: "CA_ORPHAN",
+      fromNumber: "+525500000003",
+      toNumber: "+525500000002",
+      purpose: "QUOTE",
+    });
+    await assert.rejects(
+      () =>
+        webhooks.receiveVoice(
+          {
+            CallSid: "CA_ORPHAN",
+            From: "+525500000003",
+            To: "+525500000002",
+          },
+          request,
+        ),
+      (error: unknown) =>
+        error instanceof ApiError &&
+        error.code === "INBOUND_CONTEXT_UNRESOLVED" &&
+        error.status === 422,
+    );
   });
 
   it("rejects an invalid Twilio signature", async () => {

@@ -110,6 +110,26 @@ describe("DrizzleVoiceCoreAdapter", () => {
     }
   });
 
+  it("rejects a known carrier without an active operation context", async () => {
+    const { sqlite, adapter } = fixture();
+    try {
+      sqlite.prepare("UPDATE operations SET status = 'CANCELLED'").run();
+      await assert.rejects(
+        () =>
+          adapter.resolveInboundCallContext({
+            fromNumber: "+525500000001",
+            toNumber: "+525500000002",
+          }),
+        (error: unknown) =>
+          error instanceof ApiError &&
+          error.status === 422 &&
+          error.code === "INBOUND_CONTEXT_UNRESOLVED",
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("selects the most recently updated inbound operation", async () => {
     const { sqlite, adapter } = fixture();
     try {
