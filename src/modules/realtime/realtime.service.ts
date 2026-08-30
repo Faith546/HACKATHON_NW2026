@@ -559,10 +559,7 @@ function assertExplicitVoiceAuthorization(
   let accepted = true;
   if (name === "recordVerbalAgreement") {
     accepted =
-      /\b(si|confirm\w*|acept\w*|de acuerdo|correcto|esta bien|ok|okay|adelante)\b/.test(
-        text,
-      ) &&
-      !/\b(no acept\w*|no confirm\w*|no estoy de acuerdo|no queda confirmado|aun no|todavia no|dejame|luego|despues|voy a confirmar)\b/.test(
+      !/\b(no acept\w*|rechaz\w*|no confirm\w*|no estoy de acuerdo|no queda confirmado|aun no|todavia no|dejame|luego|despues|voy a confirmar)\b/.test(
         text,
       );
   } else if (name === "confirmDelivery") {
@@ -575,23 +572,24 @@ function assertExplicitVoiceAuthorization(
       );
   } else if (name === "requestEscalation") {
     const transferIntent =
-      /\b(transfiereme|transfieranme|transferirme|transfereme|pasame|pasenme|pasarme|comunicame|comuniquenme|comunicarme)\b/.test(
+      /\b(transfier\w*|transfer\w*|pas\w*|comunica\w*|conecta\w*|escal\w*|deriva\w*)\b/.test(
         text,
       ) ||
-      /\b(puedes|podrias|quiero|necesito|quisiera)\b.{0,25}\b(transferir|pasar|comunicar)\b/.test(
+      /\b(hablar|contactar|consultar)\b.{0,30}\b(con|a)\b/.test(
         text,
       ) ||
-      /\b(quiero|necesito|puedo|podria|quisiera|me gustaria) hablar con\b.{0,40}\b(persona|humano|operador|supervisor|encargado|representante|asesor)\b/.test(
+      /\b(humano|persona|alguien mas|otra persona|operador|supervisor|encargado|representante|asesor|agente|jefe)\b/.test(
         text,
       );
     const denied =
-      /\b(no|nunca)\b.{0,30}\b(transfier\w*|transfer\w*|comunica\w*|pas\w*|hablar con)\b/.test(
+      /\b(no|nunca)\b.{0,30}\b(transfier\w*|transfer\w*|comunica\w*|conecta\w*|pas\w*|escal\w*|deriva\w*|hablar|contactar)\b/.test(
         text,
       );
     accepted = transferIntent && !denied;
   }
   if (!accepted) {
     const transferRejected = name === "requestEscalation";
+    const commitmentRejected = name === "recordVerbalAgreement";
     throw new ApiError(
       409,
       transferRejected
@@ -599,7 +597,9 @@ function assertExplicitVoiceAuthorization(
         : "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
       transferRejected
         ? "La última intervención del caller no solicita explícitamente una transferencia humana."
-        : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
+        : commitmentRejected
+          ? "La última intervención humana rechazó o pospuso el acuerdo."
+          : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
       { tool: name },
     );
   }
