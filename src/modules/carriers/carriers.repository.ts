@@ -1,6 +1,7 @@
 import { db } from "../../db";
 import { carriers } from "../../db/schema";
 import type { CreateCarrierInput } from "./carriers.types";
+import { eq } from "drizzle-orm";
 
 export class CarrierRepository {
   findAll() {
@@ -19,6 +20,17 @@ export class CarrierRepository {
       })
       .returning()
       .get();
+  }
+
+  deactivate(carrierId: string) {
+    return (
+      db
+        .update(carriers)
+        .set({ active: false })
+        .where(eq(carriers.id, carrierId))
+        .returning()
+        .get() ?? null
+    );
   }
 }
 

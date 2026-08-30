@@ -24,6 +24,15 @@ export class CarriersService {
       throw error;
     }
   }
+
+  async deleteCarrier(carrierId: string) {
+    const carrier = carrierRepository.deactivate(carrierId);
+    if (!carrier) {
+      throw new ApiError(404, "RESOURCE_NOT_FOUND", "El carrier no existe.", {
+        carrierId,
+      });
+    }
+  }
 }
 
 export const carriersService = new CarriersService();

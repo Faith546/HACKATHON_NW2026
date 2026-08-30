@@ -21,6 +21,11 @@ export class CarriersController {
 
     res.status(201).json(await carriersService.createCarrier(parsed.data));
   }
+
+  async remove(req: Request, res: Response) {
+    await carriersService.deleteCarrier(req.params.carrierId);
+    res.status(204).send();
+  }
 }
 
 export const carriersController = new CarriersController();

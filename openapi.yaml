@@ -224,6 +224,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/Carrier"
 
+  /carriers/{carrierId}:
+    parameters:
+      - $ref: "#/components/parameters/CarrierId"
+    delete:
+      tags: [Carriers]
+      operationId: deleteCarrier
+      summary: Retirar un carrier del catálogo operativo
+      description: Desactiva el carrier para nuevas operaciones y conserva su historial de negociaciones, llamadas, cotizaciones y commitments.
+      responses:
+        "204":
+          description: Carrier retirado del catálogo operativo
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /operations/{operationId}/campaigns:
     parameters:
       - $ref: "#/components/parameters/OperationId"
@@ -822,6 +836,13 @@ paths:
 
 components:
   parameters:
+    CarrierId:
+      name: carrierId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: car_01JABC123
     OperationId:
       name: operationId
       in: path
