@@ -61,12 +61,44 @@ describe("Authorized operator Realtime flow", () => {
       mode: "OPERATIONS",
     });
     await realtime.appendTranscriptSegment(session.id, {
-      id: "short_confirmation",
+      id: "container_correction",
       speaker: "HUMAN",
       source: "CALLER_AUDIO",
       startMs: 100,
       endMs: 300,
-      text: "Sí.",
+      text: "No, yo no dije ese contenedor; está equivocado.",
+      final: true,
+      interrupted: false,
+    });
+
+    await assert.rejects(
+      () =>
+        realtime.executeTool(session.id, "createOperation", {
+          customerName: "Textiles Pacífico",
+          containerNumber: "ABCD1234567",
+          origin: "Manzanillo",
+          destination: "Guadalajara",
+          weightKg: 18_000,
+          service: "DRAYAGE",
+          mandate: {
+            maxTotalPrice: 9000,
+            currency: "MXN",
+            pickupDate: "2026-09-03",
+          },
+        }),
+      (error: unknown) =>
+        error instanceof ApiError &&
+        error.code === "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
+    );
+    assert.deepEqual(executions, []);
+
+    await realtime.appendTranscriptSegment(session.id, {
+      id: "short_confirmation",
+      speaker: "HUMAN",
+      source: "CALLER_AUDIO",
+      startMs: 400,
+      endMs: 600,
+      text: "Sí, correcto.",
       final: true,
       interrupted: false,
     });
@@ -210,6 +242,37 @@ describe("Authorized operator Realtime flow", () => {
     });
     assert.equal(session.allowedTools.includes("confirmDelivery"), false);
 
+    await realtime.appendTranscriptSegment(session.id, {
+      id: "rejected_container_lookup",
+      speaker: "HUMAN",
+      source: "CALLER_AUDIO",
+      startMs: 50,
+      endMs: 90,
+      text: "No, ese no es el contenedor que dije.",
+      final: true,
+      interrupted: false,
+    });
+    await assert.rejects(
+      () =>
+        realtime.executeTool(session.id, "getOperationStatus", {
+          containerNumber: "ABCD1234567",
+        }),
+      (error: unknown) =>
+        error instanceof ApiError &&
+        error.code === "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
+    );
+    assert.equal(executed.includes("getOperationStatus"), false);
+
+    await realtime.appendTranscriptSegment(session.id, {
+      id: "confirmed_container_lookup",
+      speaker: "HUMAN",
+      source: "CALLER_AUDIO",
+      startMs: 100,
+      endMs: 140,
+      text: "Sí, correcto.",
+      final: true,
+      interrupted: false,
+    });
     await realtime.executeTool(session.id, "getOperationStatus", {
       containerNumber: "TCLU-E2E",
     });

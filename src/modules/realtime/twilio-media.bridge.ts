@@ -225,7 +225,7 @@ export class TwilioMediaBridge {
               delay: "low",
               languages: ["es", "en"],
               prompt:
-                "Conversación telefónica bilingüe de coordinación logística. Un número de contenedor tiene exactamente cuatro letras seguidas de siete dígitos. Transcribe por separado cada letra y cada dígito, incluidas repeticiones, por ejemplo ABCD1122334.",
+                "Conversación telefónica bilingüe de coordinación logística. Un número de contenedor tiene exactamente cuatro letras seguidas de siete dígitos. Transcribe por separado cada letra y cada dígito, incluidas repeticiones. No completes ni reemplaces caracteres.",
             },
             turnDetection: {
               type: "semantic_vad",
@@ -624,6 +624,7 @@ Reglas comerciales:
 - createOperation inicia automáticamente la campaña con los tres carriers activos; no llames startCampaign después de un createOperation exitoso.
 - Para consultar o cerrar una operación existente, exige primero operationId o containerNumber y usa getOperationStatus para vincular esta llamada a esa operación exacta.
 - Antes de crear o consultar por containerNumber, repítelo carácter por carácter: las cuatro letras y los siete dígitos, incluidas las repeticiones. Espera la confirmación del operador y envía todos los caracteres confirmados, sin completar ni recortar ninguno.
+- Si el operador niega, corrige o dice que no mencionó el número repetido, descarta por completo ese valor. Pide primero las cuatro letras y después los siete dígitos; no intentes corregirlo por tu cuenta y no ejecutes ninguna acción hasta recibir una nueva confirmación afirmativa.
 - Si getOperationStatus devuelve found=false y possibleContainerNumbers, lee la sugerencia completa carácter por carácter y pide confirmación. Consulta de nuevo sólo con el número que el operador confirme. Nunca selecciones automáticamente una coincidencia aproximada.
 - Si getOperationStatus devuelve found=false sin sugerencias, pide nuevamente las cuatro letras y los siete dígitos; no afirmes que la operación no existe hasta verificar el número completo.
 - Cuando getOperationStatus encuentre la operación, usa status, activeCampaign y quotes para explicar qué obtuvieron las llamadas: quién cotizó, precio, moneda y fecha. Si aún hay llamadas activas, aclara que los resultados todavía pueden cambiar.

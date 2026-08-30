@@ -299,6 +299,9 @@ export class RealtimeService {
     const transcriptEvidence =
       name === "recordVerbalAgreement" ||
       name === "createOperation" ||
+      (name === "getOperationStatus" &&
+        !session.operationId &&
+        typeof parsedArguments.containerNumber === "string") ||
       name === "requestEscalation"
         ? latestTranscriptEvidence(session)
         : name === "attachCommitmentEvidence"
@@ -309,7 +312,7 @@ export class RealtimeService {
                 trustedArguments.transcriptExcerpt as string,
             }
           : undefined;
-    if (transcriptEvidence && name !== "createOperation") {
+    if (transcriptEvidence) {
       assertExplicitVoiceAuthorization(name, transcriptEvidence, session);
     }
     const execute = () =>
@@ -557,7 +560,15 @@ function assertExplicitVoiceAuthorization(
 ): void {
   const text = normalizeTranscriptText(evidence.transcriptExcerpt);
   let accepted = true;
-  if (name === "recordVerbalAgreement") {
+  if (name === "createOperation" || name === "getOperationStatus") {
+    const affirmative =
+      /\b(si|confirmo|correcto|exacto|de acuerdo|queda confirmado|esta bien|asi es|ok|okay)\b/.test(
+        text,
+      );
+    const correction =
+      /\b(no|incorrecto|equivoc\w*|corrige\w*|cambia\w*|pero)\b/.test(text);
+    accepted = affirmative && !correction;
+  } else if (name === "recordVerbalAgreement") {
     accepted =
       !/\b(no acept\w*|rechaz\w*|no confirm\w*|no estoy de acuerdo|no queda confirmado|aun no|todavia no|dejame|luego|despues|voy a confirmar)\b/.test(
         text,
@@ -603,6 +614,8 @@ function assertExplicitVoiceAuthorization(
   if (!accepted) {
     const transferRejected = name === "requestEscalation";
     const commitmentRejected = name === "recordVerbalAgreement";
+    const operationRejected =
+      name === "createOperation" || name === "getOperationStatus";
     throw new ApiError(
       409,
       transferRejected
@@ -612,6 +625,8 @@ function assertExplicitVoiceAuthorization(
         ? "La llamada actual no contiene una solicitud de transferencia ni una respuesta afirmativa a una oferta del agente."
         : commitmentRejected
           ? "La última intervención humana rechazó o pospuso el acuerdo."
+          : operationRejected
+            ? "El contenedor requiere una confirmación afirmativa después de repetirlo carácter por carácter."
           : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
       { tool: name },
     );
