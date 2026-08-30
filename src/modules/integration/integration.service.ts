@@ -543,7 +543,7 @@ export class IntegrationService {
         if (
           error instanceof ApiError &&
           error.code ===
-            "AUTONOMOUS_CAMPAIGN_REQUIRES_EXACTLY_THREE_CARRIERS"
+            "AUTONOMOUS_CAMPAIGN_REQUIRES_ACTIVE_CARRIERS"
         ) {
           process.stderr.write(
             `[AUTONOMOUS_RECOVERY_SKIPPED] operationId=${operation.id} code=${error.code}\n`,
@@ -672,11 +672,11 @@ export class IntegrationService {
     const activeCarriers = (await this.carriersService.listCarriers()).filter(
       (carrier) => carrier.active,
     );
-    if (activeCarriers.length !== 3) {
+    if (activeCarriers.length < 1 || activeCarriers.length > 3) {
       throw new ApiError(
         409,
-        "AUTONOMOUS_CAMPAIGN_REQUIRES_EXACTLY_THREE_CARRIERS",
-        "La campaña automática requiere exactamente tres carriers activos.",
+        "AUTONOMOUS_CAMPAIGN_REQUIRES_ACTIVE_CARRIERS",
+        "La campaña automática requiere entre uno y tres carriers activos.",
         { activeCarrierIds: activeCarriers.map((carrier) => carrier.id) },
       );
     }
@@ -684,7 +684,7 @@ export class IntegrationService {
       operationId,
       {
         carrierIds: activeCarriers.map((carrier) => carrier.id),
-        maxParallelCalls: 3,
+        maxParallelCalls: activeCarriers.length,
       },
       actorId,
     );
