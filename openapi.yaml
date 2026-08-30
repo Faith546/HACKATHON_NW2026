@@ -210,6 +210,7 @@ paths:
       tags: [Carriers]
       operationId: createCarrier
       summary: Crear un carrier ficticio o de prueba
+      description: Si el teléfono pertenece a un carrier inactivo, restaura ese mismo registro con los datos enviados.
       requestBody:
         required: true
         content:
