@@ -26,12 +26,15 @@ import {
 import type { VoiceToolName } from "./voice-core.port";
 
 const identifier = z.string().trim().min(1);
+const containerNumber = identifier.describe(
+  "Número de contenedor confirmado carácter por carácter. Conserva todas las letras y dígitos; no completes ni elimines caracteres.",
+);
 const nonEmptyText = z.string().trim().min(1);
 const emptyArguments = z.object({}).strict();
 const operationReferenceArguments = z
   .object({
     operationId: identifier.optional(),
-    containerNumber: identifier.optional(),
+    containerNumber: containerNumber.optional(),
   })
   .strict();
 const commitmentEvidenceArguments = z
@@ -63,6 +66,7 @@ const commitmentEvidenceArguments = z
   });
 
 const voiceCreateOperationSchema = CreateOperationSchema.extend({
+  containerNumber,
   weightKg: z.number().int().positive(),
 }).strict();
 

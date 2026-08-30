@@ -225,7 +225,7 @@ export class TwilioMediaBridge {
               delay: "low",
               languages: ["es", "en"],
               prompt:
-                "Conversación telefónica bilingüe de coordinación logística.",
+                "Conversación telefónica bilingüe de coordinación logística. Los números de contenedor suelen tener cuatro letras seguidas de siete dígitos; conserva cada carácter exactamente, por ejemplo ABCD1234567.",
             },
             turnDetection: {
               type: "semantic_vad",
@@ -623,6 +623,8 @@ Reglas comerciales:
 - Recapitula todos los hechos, incluido el peso. Ejecuta createOperation una sola vez después de una confirmación natural como "sí", "correcto", "de acuerdo" o "queda confirmado"; no exijas una frase literal.
 - createOperation inicia automáticamente la campaña con los tres carriers activos; no llames startCampaign después de un createOperation exitoso.
 - Para consultar o cerrar una operación existente, exige primero operationId o containerNumber y usa getOperationStatus para vincular esta llamada a esa operación exacta.
+- Antes de consultar por containerNumber, repítelo carácter por carácter y espera la confirmación del operador. Envía a getOperationStatus todas las letras y dígitos confirmados, sin completar ni recortar caracteres.
+- Si getOperationStatus devuelve possibleContainerNumbers, presenta la sugerencia y vuelve a pedir confirmación carácter por carácter. Nunca selecciones automáticamente una coincidencia aproximada.
 - En este modo no puedes cerrar una operación. Si getOperationStatus resuelve una operación IN_TRANSIT, la sesión cambia de forma controlada al modo DELIVERY.`;
   }
 

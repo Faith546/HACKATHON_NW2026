@@ -37,6 +37,8 @@ describe("RealtimeService", () => {
     assert.match(instructions, /repite de inmediato la última pregunta pendiente/i);
     assert.match(instructions, /peso aproximado de la carga en kilogramos/i);
     assert.match(instructions, /Nunca supongas ni uses un peso por defecto/i);
+    assert.match(instructions, /repítelo carácter por carácter/i);
+    assert.match(instructions, /Nunca selecciones automáticamente/i);
   });
 
   it("transfers only the call whose carrier explicitly requests a human", async () => {
@@ -135,6 +137,30 @@ describe("RealtimeService", () => {
         error instanceof ApiError &&
         error.code === "EXPLICIT_HUMAN_TRANSFER_REQUEST_REQUIRED",
     );
+    await realtime.appendTranscriptSegment(sessions[0]!.id, {
+      id: "agent_offers_transfer",
+      speaker: "AGENT",
+      source: "AGENT_AUDIO",
+      startMs: 1_200,
+      endMs: 1_500,
+      text: "¿Quieres que te transfiera con una persona?",
+      final: true,
+      interrupted: false,
+    });
+    await realtime.appendTranscriptSegment(sessions[0]!.id, {
+      id: "caller_accepts_transfer",
+      speaker: "HUMAN",
+      source: "CALLER_AUDIO",
+      startMs: 1_600,
+      endMs: 1_800,
+      text: "Sí.",
+      final: true,
+      interrupted: false,
+    });
+    await realtime.executeTool(sessions[0]!.id, "requestEscalation", {
+      reason: "HUMAN_REQUESTED",
+      contextSummary: "Aceptó la transferencia ofrecida.",
+    });
     await realtime.executeTool(sessions[1]!.id, "requestEscalation", {
       reason: "HUMAN_REQUESTED",
       contextSummary: "Pidió hablar con Luis.",
@@ -149,7 +175,7 @@ describe("RealtimeService", () => {
         error.code === "EXPLICIT_HUMAN_TRANSFER_REQUEST_REQUIRED",
     );
 
-    assert.deepEqual(transferredCalls, ["call_2"]);
+    assert.deepEqual(transferredCalls, ["call_1", "call_2"]);
   });
 
   it("limits tools by mode and persists the transcript when closed", async () => {

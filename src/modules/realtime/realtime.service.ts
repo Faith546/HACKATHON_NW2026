@@ -298,7 +298,8 @@ export class RealtimeService {
         : parsedArguments;
     const transcriptEvidence =
       name === "recordVerbalAgreement" ||
-      name === "createOperation"
+      name === "createOperation" ||
+      name === "requestEscalation"
         ? latestTranscriptEvidence(session)
         : name === "attachCommitmentEvidence"
           ? {
@@ -309,7 +310,7 @@ export class RealtimeService {
             }
           : undefined;
     if (transcriptEvidence && name !== "createOperation") {
-      assertExplicitVoiceAuthorization(name, transcriptEvidence);
+      assertExplicitVoiceAuthorization(name, transcriptEvidence, session);
     }
     const execute = () =>
       this.dependencies.voiceCore.executeVoiceTool({
@@ -551,7 +552,8 @@ function normalizeTranscriptText(value: string): string {
 
 function assertExplicitVoiceAuthorization(
   name: VoiceToolName,
-  evidence: { transcriptExcerpt: string },
+  evidence: { startMs: number; transcriptExcerpt: string },
+  session: RealtimeSession,
 ): void {
   const text = normalizeTranscriptText(evidence.transcriptExcerpt);
   let accepted = true;
@@ -560,15 +562,57 @@ function assertExplicitVoiceAuthorization(
       !/\b(no acept\w*|rechaz\w*|no confirm\w*|no estoy de acuerdo|no queda confirmado|aun no|todavia no|dejame|luego|despues|voy a confirmar)\b/.test(
         text,
       );
+  } else if (name === "requestEscalation") {
+    const denied =
+      /\b(no|nunca)\b.{0,30}\b(transfier\w*|transfer\w*|comunica\w*|conecta\w*|pas\w*|hablar|contactar)\b/.test(
+        text,
+      );
+    const explicitRequest =
+      /\b(transfier\w*|transfer\w*|pasame|pasenme|comunicame|conectame|escalame|derivame)\b/.test(
+        text,
+      ) ||
+      /\b(quiero|necesito|quisiera|puedo|podria|me gustaria)\b.{0,35}\b(hablar|contactar|consultar)\b.{0,30}\b(con|a)\b/.test(
+        text,
+      ) ||
+      /\b(quiero|necesito|prefiero)\b.{0,25}\b(humano|persona|operador|supervisor|representante|asesor)\b/.test(
+        text,
+      );
+    const previousAgentTurn = [...session.transcriptSegments]
+      .filter(
+        (segment) =>
+          segment.speaker === "AGENT" &&
+          segment.source === "AGENT_AUDIO" &&
+          segment.final &&
+          !segment.interrupted &&
+          segment.endMs <= evidence.startMs,
+      )
+      .sort((left, right) => right.endMs - left.endMs)[0];
+    const agentOfferedTransfer = previousAgentTurn
+      ? /\b(transfier\w*|transfer\w*|pasar\w*|comunicar\w*|conectar\w*|humano|persona|operador|supervisor|representante|asesor)\b/.test(
+          normalizeTranscriptText(previousAgentTurn.text),
+        )
+      : false;
+    const affirmativeReply =
+      /^(si|claro|por favor|adelante|de acuerdo|esta bien|correcto|exacto|ok|okay|hazlo)[.!\s]*$/.test(
+        text,
+      );
+    accepted =
+      !denied &&
+      (explicitRequest || (agentOfferedTransfer && affirmativeReply));
   }
   if (!accepted) {
+    const transferRejected = name === "requestEscalation";
     const commitmentRejected = name === "recordVerbalAgreement";
     throw new ApiError(
       409,
-      "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
-      commitmentRejected
-        ? "La última intervención humana rechazó o pospuso el acuerdo."
-        : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
+      transferRejected
+        ? "EXPLICIT_HUMAN_TRANSFER_REQUEST_REQUIRED"
+        : "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
+      transferRejected
+        ? "La llamada actual no contiene una solicitud de transferencia ni una respuesta afirmativa a una oferta del agente."
+        : commitmentRejected
+          ? "La última intervención humana rechazó o pospuso el acuerdo."
+          : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
       { tool: name },
     );
   }

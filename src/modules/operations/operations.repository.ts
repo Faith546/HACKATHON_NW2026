@@ -130,14 +130,48 @@ export class OperationsRepository {
   }
 
   findOperationByContainerNumber(containerNumber: string) {
-    const operation = db
+    const exactOperation = db
       .select()
       .from(operations)
       .where(eq(operations.containerNumber, containerNumber))
       .get();
+    const operation =
+      exactOperation ?? this.findUniqueFormattedContainer(containerNumber);
     if (!operation) return null;
     const mandate = this.findActiveMandate(operation.id);
     return { operation, mandate };
+  }
+
+  findSimilarContainerNumbers(containerNumber: string): string[] {
+    const reference = containerComparisonKey(containerNumber);
+    if (!reference) return [];
+    return db
+      .select({ containerNumber: operations.containerNumber })
+      .from(operations)
+      .all()
+      .map(({ containerNumber: candidate }) => ({
+        candidate,
+        key: containerComparisonKey(candidate),
+      }))
+      .filter(
+        ({ key }) => key !== reference && isOneCharacterAway(reference, key),
+      )
+      .map(({ candidate }) => candidate)
+      .slice(0, 3);
+  }
+
+  private findUniqueFormattedContainer(containerNumber: string) {
+    const reference = containerComparisonKey(containerNumber);
+    if (!reference) return null;
+    const matches = db
+      .select()
+      .from(operations)
+      .all()
+      .filter(
+        (operation) =>
+          containerComparisonKey(operation.containerNumber) === reference,
+      );
+    return matches.length === 1 ? matches[0]! : null;
   }
 
   findOperations(status?: OperationStatus) {
@@ -356,3 +390,32 @@ export class OperationsRepository {
 }
 
 export const operationsRepository = new OperationsRepository();
+
+function containerComparisonKey(value: string): string {
+  return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+}
+
+function isOneCharacterAway(left: string, right: string): boolean {
+  if (Math.abs(left.length - right.length) > 1) return false;
+  if (left.length === right.length) {
+    return [...left].filter((character, index) => character !== right[index])
+      .length === 1;
+  }
+  const [shorter, longer] =
+    left.length < right.length ? [left, right] : [right, left];
+  let skipped = false;
+  for (
+    let shortIndex = 0, longIndex = 0;
+    longIndex < longer.length;
+    longIndex += 1
+  ) {
+    if (shorter[shortIndex] === longer[longIndex]) {
+      shortIndex += 1;
+    } else if (skipped) {
+      return false;
+    } else {
+      skipped = true;
+    }
+  }
+  return true;
+}
