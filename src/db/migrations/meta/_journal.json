@@ -19,8 +19,15 @@
     {
       "idx": 2,
       "version": "6",
-      "when": 1788061455555,
-      "tag": "0002_round_pestilence",
+      "when": 1788060148166,
+      "tag": "0002_perpetual_thunderbolts",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788063306398,
+      "tag": "0003_silent_chronomancer",
       "breakpoints": true
     }
   ]

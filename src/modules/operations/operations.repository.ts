@@ -55,6 +55,7 @@ export class OperationsRepository {
           containerNumber: input.containerNumber,
           origin: input.origin,
           destination: input.destination,
+          weightKg: input.weightKg ?? 10000,
           service: input.service,
           notes: input.notes ?? null,
           status: "CREATED",

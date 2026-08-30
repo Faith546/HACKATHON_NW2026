@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c177eb56-2ef0-46fc-a1f0-f3f14798361e",
-  "prevId": "03b17d02-359f-4256-9166-dafa2fb525a4",
+  "id": "94689ef2-6809-4281-b9ce-ccecafe051f6",
+  "prevId": "c177eb56-2ef0-46fc-a1f0-f3f14798361e",
   "tables": {
     "audit_events": {
       "name": "audit_events",
@@ -153,6 +153,107 @@
         }
       }
     },
+    "call_timing_events": {
+      "name": "call_timing_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "call_id": {
+          "name": "call_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "stream_sid": {
+          "name": "stream_sid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "clock": {
+          "name": "clock",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "raw_timestamp_ms": {
+          "name": "raw_timestamp_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "metadata_json": {
+          "name": "metadata_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_call_timing_call_created": {
+          "name": "idx_call_timing_call_created",
+          "columns": [
+            "call_id",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "call_timing_events_call_id_calls_id_fk": {
+          "name": "call_timing_events_call_id_calls_id_fk",
+          "tableFrom": "call_timing_events",
+          "tableTo": "calls",
+          "columnsFrom": [
+            "call_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_call_timing_clock": {
+          "name": "ck_call_timing_clock",
+          "value": "\"call_timing_events\".\"clock\" IN ('twilio_stream', 'openai_input', 'recording', 'local_observation')"
+        }
+      }
+    },
     "calls": {
       "name": "calls",
       "columns": {
@@ -187,6 +288,41 @@
         "twilio_call_sid": {
           "name": "twilio_call_sid",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "twilio_stream_sid": {
+          "name": "twilio_stream_sid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recording_sid": {
+          "name": "recording_sid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recording_status": {
+          "name": "recording_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recording_url": {
+          "name": "recording_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recording_duration_seconds": {
+          "name": "recording_duration_seconds",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -275,6 +411,20 @@
           "name": "uq_calls_twilio_call_sid",
           "columns": [
             "twilio_call_sid"
+          ],
+          "isUnique": true
+        },
+        "uq_calls_twilio_stream_sid": {
+          "name": "uq_calls_twilio_stream_sid",
+          "columns": [
+            "twilio_stream_sid"
+          ],
+          "isUnique": true
+        },
+        "uq_calls_recording_sid": {
+          "name": "uq_calls_recording_sid",
+          "columns": [
+            "recording_sid"
           ],
           "isUnique": true
         },
@@ -1578,6 +1728,34 @@
         "call_id": {
           "name": "call_id",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "grounded_caller_item_id": {
+          "name": "grounded_caller_item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "grounded_transcript": {
+          "name": "grounded_transcript",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "grounded_start_ms": {
+          "name": "grounded_start_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "grounded_end_ms": {
+          "name": "grounded_end_ms",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

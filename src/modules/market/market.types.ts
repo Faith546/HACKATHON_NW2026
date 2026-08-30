@@ -40,15 +40,16 @@ export type GroundedSaveQuoteInput = SaveQuoteInput & {
 export const marketStrategies = [
   "LOWEST_VALID_TOTAL",
   "BALANCED_SCORE",
+  "BEST_WEIGHT_PRICE_RATIO",
 ] as const;
 
 export type MarketStrategy = (typeof marketStrategies)[number];
 
 export const SelectQuoteSchema = z
   .object({
-    strategy: z.enum(marketStrategies).default("LOWEST_VALID_TOTAL"),
+    strategy: z.enum(marketStrategies).default("BEST_WEIGHT_PRICE_RATIO"),
   })
-  .default({ strategy: "LOWEST_VALID_TOTAL" });
+  .default({ strategy: "BEST_WEIGHT_PRICE_RATIO" });
 
 export type SelectQuoteInput = z.infer<typeof SelectQuoteSchema>;
 
