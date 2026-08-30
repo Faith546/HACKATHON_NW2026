@@ -12,14 +12,28 @@ import {
 describe("TwilioTelephonyGateway", () => {
   it("creates an outbound call with status correlation and Media Stream", async () => {
     const requests: Record<string, unknown>[] = [];
-    const client: TwilioCallsClient = {
-      calls: {
-        create: async (input) => {
-          requests.push(input as unknown as Record<string, unknown>);
-          return { sid: "CA_PROVIDER" };
+    const mockClient = Object.assign(
+      (callId?: string) => ({
+        recordings: {
+          create: async () => ({ sid: "RE_mock123" }),
         },
-      },
-    };
+      }),
+      {
+        calls: Object.assign(
+          (callId?: string) => ({
+            recordings: {
+              create: async () => ({ sid: "RE_mock123" }),
+            },
+          }),
+          {
+            create: async (input: any) => {
+              requests.push(input as unknown as Record<string, unknown>);
+              return { sid: "CA_PROVIDER" };
+            },
+          }
+        )
+      }
+    ) as unknown as TwilioCallsClient;
     const gateway = new TwilioTelephonyGateway(
       {
         accountSid: "AC_TEST",
@@ -28,7 +42,7 @@ describe("TwilioTelephonyGateway", () => {
         publicBaseUrl: "https://example.test",
         publicWssUrl: "wss://example.test",
       },
-      client,
+      mockClient,
     );
 
     assert.deepEqual(

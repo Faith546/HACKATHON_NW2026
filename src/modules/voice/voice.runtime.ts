@@ -12,6 +12,7 @@ import { CallsService } from "../calls/calls.service";
 import type {
   CallLifecycleObserver,
   OutboundCallContextResolver,
+  StartOutboundCallInput,
   TelephonyGateway,
 } from "../calls/calls.types";
 import { TwilioTelephonyGateway } from "../calls/twilio-telephony.gateway";
@@ -34,8 +35,13 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as databaseSchema from "../../db/schema";
 
 class FakeTelephonyGateway implements TelephonyGateway {
-  async startOutboundCall(): Promise<{ providerCallId: string }> {
-    return { providerCallId: `CA_FAKE_${randomUUID()}` };
+  async startOutboundCall(
+    input: StartOutboundCallInput,
+  ): Promise<{ providerCallId: string }> {
+    return { providerCallId: `CA_fake_${input.callId}` };
+  }
+  async startRecording(providerCallId: string): Promise<void> {
+    // Fake implementation
   }
 }
 

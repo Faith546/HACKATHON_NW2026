@@ -30,6 +30,8 @@ class TestTelephonyGateway implements TelephonyGateway {
     this.calls.push(structuredClone(input));
     return { providerCallId: "CA_TEST_001" };
   }
+
+  async startRecording(_providerCallId: string): Promise<void> {}
 }
 
 describe("calls HTTP vertical slice", () => {
