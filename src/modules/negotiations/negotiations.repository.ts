@@ -3,12 +3,12 @@ import { db } from "../../db";
 import { negotiations } from "../../db/schema";
 
 export class NegotiationsRepository {
-  async getNegotiationById(negotiationId: string) {
-    const [negotiation] = await db
+  getNegotiationById(negotiationId: string) {
+    return db
       .select()
       .from(negotiations)
-      .where(eq(negotiations.id, negotiationId));
-    return negotiation ?? null;
+      .where(eq(negotiations.id, negotiationId))
+      .get() ?? null;
   }
 }
 

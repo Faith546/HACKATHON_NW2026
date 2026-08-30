@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, it } from "node:test";
 import Database from "better-sqlite3";
+import express from "express";
+import { db } from "../src/db";
+import { auditEvents, mandates, operations } from "../src/db/schema";
+import { createAuditOperationRouter } from "../src/modules/audit/audit.routes";
 import {
   AuditWriter,
   type AuditEventRecord,
   type AuditEventRepository,
 } from "../src/shared/audit/audit-writer";
+import {
+  errorHandler,
+  notFoundHandler,
+} from "../src/shared/http/error-handler";
 
 class TemporarySqliteAuditRepository implements AuditEventRepository {
   constructor(private readonly database: Database.Database) {}
@@ -80,6 +91,111 @@ describe("AuditWriter", () => {
       });
     } finally {
       database.close();
+    }
+  });
+
+  it("returns an operation timeline chronologically with payload parsed", async () => {
+    const operationId = `op_audit_${randomUUID()}`;
+    await db.insert(operations).values({
+      id: operationId,
+      customerName: "Audit Test",
+      containerNumber: `AUD${randomUUID().slice(0, 10)}`,
+      origin: "A",
+      destination: "B",
+    });
+    await db.insert(mandates).values({
+      id: `man_audit_${randomUUID()}`,
+      operationId,
+      version: 1,
+      status: "ACTIVE",
+      maxTotalPriceCents: 100_000,
+      currency: "MXN",
+      pickupDate: "2026-09-03",
+    });
+    await db.insert(auditEvents).values([
+      {
+        id: `evt_z_${randomUUID()}`,
+        operationId,
+        eventType: "SECOND",
+        actorType: "SYSTEM",
+        payloadJson: JSON.stringify({ sequence: 2, nested: { ok: true } }),
+        occurredAt: "2026-08-29T22:00:00.000Z",
+      },
+      {
+        id: `evt_a_${randomUUID()}`,
+        operationId,
+        eventType: "FIRST",
+        actorType: "INTERNAL_OPERATOR",
+        actorId: "operator_1",
+        entityType: "OPERATION",
+        entityId: operationId,
+        payloadJson: JSON.stringify({ sequence: 1 }),
+        occurredAt: "2026-08-29T21:00:00.000Z",
+      },
+    ]);
+
+    const app = express();
+    app.use(
+      "/api/v1/operations/:operationId/audit-events",
+      createAuditOperationRouter(),
+    );
+    app.use(notFoundHandler);
+    app.use(errorHandler);
+    const server = app.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+
+    try {
+      const address = server.address() as AddressInfo;
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/api/v1/operations/${operationId}/audit-events`,
+      );
+      const body = (await response.json()) as Array<Record<string, any>>;
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(
+        body.map((event) => event.eventType),
+        ["FIRST", "SECOND"],
+      );
+      assert.deepEqual(body[0]?.payload, { sequence: 1 });
+      assert.deepEqual(body[1]?.payload, {
+        sequence: 2,
+        nested: { ok: true },
+      });
+      assert.equal("payloadJson" in (body[0] ?? {}), false);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        (server as Server).close((error) =>
+          error ? reject(error) : resolve(),
+        );
+      });
+    }
+  });
+
+  it("returns 404 instead of an empty timeline for an unknown operation", async () => {
+    const app = express();
+    app.use(
+      "/api/v1/operations/:operationId/audit-events",
+      createAuditOperationRouter(),
+    );
+    app.use(notFoundHandler);
+    app.use(errorHandler);
+    const server = app.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+
+    try {
+      const address = server.address() as AddressInfo;
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/api/v1/operations/op_missing_${randomUUID()}/audit-events`,
+      );
+      const body = (await response.json()) as Record<string, unknown>;
+      assert.equal(response.status, 404);
+      assert.equal(body.code, "RESOURCE_NOT_FOUND");
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        (server as Server).close((error) =>
+          error ? reject(error) : resolve(),
+        );
+      });
     }
   });
 });

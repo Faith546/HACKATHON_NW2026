@@ -728,8 +728,6 @@ paths:
       operationId: receiveTwilioVoiceCall
       summary: Recibir una llamada entrante de Twilio
       description: Twilio usa form-urlencoded. El backend crea la llamada y devuelve TwiML para conectar el stream o conferencia.
-      servers:
-        - url: http://127.0.0.1:3000
       requestBody:
         required: true
         content:
@@ -751,8 +749,6 @@ paths:
       tags: [Webhooks]
       operationId: receiveTwilioCallStatus
       summary: Actualizar el lifecycle de una llamada
-      servers:
-        - url: http://127.0.0.1:3000
       requestBody:
         required: true
         content:

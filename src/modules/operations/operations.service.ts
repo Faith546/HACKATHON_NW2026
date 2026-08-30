@@ -1,0 +1,137 @@
+import type { commitments, operations } from "../../db/schema";
+import { ApiError } from "../../shared/http/api-error";
+import { toCampaignResponse } from "../campaigns/campaigns.types";
+import { toMandateResponse } from "../mandates/mandates.types";
+import { operationsRepository } from "./operations.repository";
+import type {
+  CancelOperationInput,
+  CreateOperationInput,
+  OperationResponse,
+  OperationStatus,
+} from "./operations.types";
+
+type OperationRow = typeof operations.$inferSelect;
+type CommitmentRow = typeof commitments.$inferSelect;
+
+export function toOperationResponse(
+  operation: OperationRow,
+  mandate: Parameters<typeof toMandateResponse>[0] | null,
+): OperationResponse {
+  if (!mandate) {
+    throw new ApiError(
+      500,
+      "OPERATION_MANDATE_INVARIANT_VIOLATION",
+      "La operación no tiene un mandato activo.",
+      { operationId: operation.id },
+    );
+  }
+  return {
+    id: operation.id,
+    customerName: operation.customerName,
+    containerNumber: operation.containerNumber,
+    origin: operation.origin,
+    destination: operation.destination,
+    service: operation.service as "DRAYAGE",
+    mandate: toMandateResponse(mandate),
+    ...(operation.notes === null ? {} : { notes: operation.notes }),
+    status: operation.status as OperationStatus,
+    selectedCarrierId: operation.selectedCarrierId,
+    createdAt: operation.createdAt,
+    updatedAt: operation.updatedAt,
+  };
+}
+
+function toCommitmentResponse(commitment: CommitmentRow) {
+  return {
+    id: commitment.id,
+    operationId: commitment.operationId,
+    quoteId: commitment.quoteId,
+    carrierId: commitment.carrierId,
+    status: commitment.status,
+    mandateId: commitment.mandateId,
+    totalPrice: commitment.totalPriceCents / 100,
+    currency: commitment.currency,
+    pickupDate: commitment.pickupDate,
+    verbalAgreementCallId: commitment.verbalAgreementCallId,
+    evidenceStartMs: commitment.evidenceStartMs,
+    evidenceEndMs: commitment.evidenceEndMs,
+    evidenceTranscriptExcerpt: commitment.evidenceTranscriptExcerpt,
+    summaryChannel: commitment.summaryChannel,
+    summaryProviderId: commitment.summaryProviderId,
+    summarySentAt: commitment.summarySentAt,
+    createdAt: commitment.createdAt,
+  };
+}
+
+export class OperationsService {
+  async createOperation(input: CreateOperationInput, actorId?: string) {
+    const result = operationsRepository.createOperationWithMandate(
+      input,
+      actorId,
+    );
+    return toOperationResponse(result.operation, result.mandate);
+  }
+
+  async listOperations(status?: OperationStatus) {
+    return operationsRepository
+      .findOperations(status)
+      .map(({ operation, mandate }) =>
+        toOperationResponse(operation, mandate),
+      );
+  }
+
+  async getOperation(operationId: string) {
+    const result = operationsRepository.findOperationById(operationId);
+    if (!result) {
+      throw new ApiError(
+        404,
+        "RESOURCE_NOT_FOUND",
+        "Operación no encontrada.",
+        { operationId },
+      );
+    }
+    return toOperationResponse(result.operation, result.mandate);
+  }
+
+  async getOperationStatus(operationId: string) {
+    const result = operationsRepository.getStatus(operationId);
+    if (!result) {
+      throw new ApiError(
+        404,
+        "RESOURCE_NOT_FOUND",
+        "Operación no encontrada.",
+        { operationId },
+      );
+    }
+    return {
+      operation: toOperationResponse(result.operation, result.mandate),
+      activeMandate: result.mandate
+        ? toMandateResponse(result.mandate)
+        : null,
+      activeCampaign:
+        result.activeCampaign && result.campaignProgress
+          ? toCampaignResponse(result.activeCampaign, result.campaignProgress)
+          : null,
+      activeCommitment: result.activeCommitment
+        ? toCommitmentResponse(result.activeCommitment)
+        : null,
+      activeCalls: result.activeCalls,
+      quoteCount: result.quoteCount,
+    };
+  }
+
+  async cancelOperation(
+    operationId: string,
+    input: CancelOperationInput,
+    actorId?: string,
+  ) {
+    const result = operationsRepository.cancelOperation(
+      operationId,
+      input,
+      actorId,
+    );
+    return toOperationResponse(result.operation, result.mandate);
+  }
+}
+
+export const operationsService = new OperationsService();

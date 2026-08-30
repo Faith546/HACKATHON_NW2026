@@ -122,12 +122,21 @@ export interface CallScheduler {
   enqueueQuoteCalls(input: {
     operationId: string;
     campaignId: string;
+    maxParallelCalls: number;
     negotiations: Array<{
       negotiationId: string;
       carrierId: string;
       phone: string;
     }>;
   }): Promise<void>;
+}
+
+export interface CallLifecycleObserver {
+  onStatusChanged(input: {
+    call: Call;
+    previousStatus: CallStatus;
+    changed: boolean;
+  }): Promise<void> | void;
 }
 
 export function toCallResponse(call: Call) {

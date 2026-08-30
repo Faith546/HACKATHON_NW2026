@@ -1,33 +1,76 @@
 import type { Request, Response } from "express";
-import { operationsRepository } from "./operations.repository";
-import { CreateOperationSchema } from "./operations.types";
+import { operationsService } from "./operations.service";
+import {
+  CancelOperationSchema,
+  CreateOperationSchema,
+  ListOperationsQuerySchema,
+} from "./operations.types";
 import { ApiError } from "../../shared/http/api-error";
 
 export class OperationsController {
   async create(req: Request, res: Response) {
     const parsed = CreateOperationSchema.safeParse(req.body);
     if (!parsed.success) {
-      throw new ApiError(400, "INVALID_INPUT", "Datos de operación inválidos", parsed.error.format());
+      throw new ApiError(
+        422,
+        "VALIDATION_ERROR",
+        "Datos de operación inválidos.",
+        parsed.error.format(),
+      );
     }
 
-    const { operation, mandate } = await operationsRepository.createOperationWithMandate(parsed.data);
-    
-    // El openapi original especificaba devolver todo junto en un solo objeto para simplificar en v1
-    res.status(201).json({
-      ...operation,
-      mandate,
-    });
+    const operation = await operationsService.createOperation(
+      parsed.data,
+      req.get("x-actor-id") ?? undefined,
+    );
+    res.status(201).json(operation);
+  }
+
+  async list(req: Request, res: Response) {
+    const parsed = ListOperationsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new ApiError(
+        422,
+        "VALIDATION_ERROR",
+        "El filtro de operaciones es inválido.",
+        parsed.error.format(),
+      );
+    }
+    res.status(200).json(
+      await operationsService.listOperations(parsed.data.status),
+    );
   }
 
   async get(req: Request, res: Response) {
     const operationId = req.params.operationId as string;
-    const operation = await operationsRepository.findOperationById(operationId);
-    
-    if (!operation) {
-      throw new ApiError(404, "RESOURCE_NOT_FOUND", "Operación no encontrada");
-    }
+    res.status(200).json(await operationsService.getOperation(operationId));
+  }
 
-    res.status(200).json(operation);
+  async getStatus(req: Request, res: Response) {
+    const operationId = req.params.operationId as string;
+    res
+      .status(200)
+      .json(await operationsService.getOperationStatus(operationId));
+  }
+
+  async cancel(req: Request, res: Response) {
+    const operationId = req.params.operationId as string;
+    const parsed = CancelOperationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ApiError(
+        422,
+        "VALIDATION_ERROR",
+        "El motivo de cancelación es obligatorio.",
+        parsed.error.format(),
+      );
+    }
+    res.status(200).json(
+      await operationsService.cancelOperation(
+        operationId,
+        parsed.data,
+        req.get("x-actor-id") ?? undefined,
+      ),
+    );
   }
 }
 

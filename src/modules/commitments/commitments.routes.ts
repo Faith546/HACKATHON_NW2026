@@ -1,12 +1,41 @@
 import { Router } from "express";
-import { commitmentsController } from "./commitments.controller";
+import { CommitmentsController } from "./commitments.controller";
 import { asyncHandler } from "../../shared/http/async-handler";
+import {
+  CommitmentsService,
+  commitmentsService,
+} from "./commitments.service";
 
-// For /operations/:operationId/commitments
-export const commitmentsOperationRouter = Router({ mergeParams: true });
-commitmentsOperationRouter.post("/", asyncHandler(commitmentsController.create));
+export function createCommitmentsOperationRouter(
+  service: CommitmentsService = commitmentsService,
+): Router {
+  const router = Router({ mergeParams: true });
+  const controller = new CommitmentsController(service);
+  router.post("/authorize", asyncHandler(controller.authorize));
+  router.get("/", asyncHandler(controller.list));
+  return router;
+}
 
-// For /commitments
-export const commitmentsRouter = Router({ mergeParams: true });
-commitmentsRouter.post("/:commitmentId/confirm", asyncHandler(commitmentsController.confirm));
-commitmentsRouter.get("/:commitmentId", asyncHandler(commitmentsController.get));
+export function createCommitmentsRouter(
+  service: CommitmentsService = commitmentsService,
+): Router {
+  const router = Router({ mergeParams: true });
+  const controller = new CommitmentsController(service);
+  router.post(
+    "/:commitmentId/verbal-agreement",
+    asyncHandler(controller.recordVerbalAgreement),
+  );
+  router.post(
+    "/:commitmentId/evidence",
+    asyncHandler(controller.attachEvidence),
+  );
+  router.post(
+    "/:commitmentId/summary",
+    asyncHandler(controller.enqueueSummary),
+  );
+  return router;
+}
+
+export const commitmentsOperationRouter =
+  createCommitmentsOperationRouter();
+export const commitmentsRouter = createCommitmentsRouter();

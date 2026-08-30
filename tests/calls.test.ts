@@ -210,6 +210,7 @@ describe("CallScheduler integration port", () => {
     await service.enqueueQuoteCalls({
       operationId: "op_campaign",
       campaignId: "cmp_1",
+      maxParallelCalls: 3,
       negotiations: [
         { negotiationId: "neg_1", carrierId: "car_1", phone: "+525500000001" },
         { negotiationId: "neg_2", carrierId: "car_2", phone: "+525500000002" },
@@ -223,5 +224,46 @@ describe("CallScheduler integration port", () => {
       schedulerGateway.calls.map((call) => call.toNumber),
       ["+525500000001", "+525500000002", "+525500000003"],
     );
+  });
+
+  it("holds later campaign calls until a maxParallelCalls slot is released", async () => {
+    const schedulerQueue = new InMemoryJobQueue({ concurrency: 3, maxRetries: 0 });
+    const providerCalls: StartOutboundCallInput[] = [];
+    let sequence = 0;
+    const service = new CallsService({
+      repository: new InMemoryCallRepository(),
+      queue: schedulerQueue,
+      telephonyGateway: {
+        startOutboundCall: async (input) => {
+          providerCalls.push(structuredClone(input));
+          return { providerCallId: `CA_LIMIT_${providerCalls.length}` };
+        },
+      },
+      contextResolver: {
+        resolve: async () => ({ toNumber: "+525500000001" }),
+      },
+      createId: () => `call_limited_${++sequence}`,
+    });
+
+    await service.enqueueQuoteCalls({
+      operationId: "op_limited",
+      campaignId: "cmp_limited",
+      maxParallelCalls: 1,
+      negotiations: [
+        { negotiationId: "neg_l1", carrierId: "car_l1", phone: "+525500000011" },
+        { negotiationId: "neg_l2", carrierId: "car_l2", phone: "+525500000012" },
+        { negotiationId: "neg_l3", carrierId: "car_l3", phone: "+525500000013" },
+      ],
+    });
+    await schedulerQueue.onIdle();
+    assert.equal(providerCalls.length, 1);
+
+    await service.applyProviderStatus("CA_LIMIT_1", "COMPLETED");
+    await schedulerQueue.onIdle();
+    assert.equal(providerCalls.length, 2);
+
+    await service.applyProviderStatus("CA_LIMIT_2", "NO_ANSWER");
+    await schedulerQueue.onIdle();
+    assert.equal(providerCalls.length, 3);
   });
 });

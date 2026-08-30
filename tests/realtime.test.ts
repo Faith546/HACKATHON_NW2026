@@ -68,8 +68,20 @@ describe("RealtimeService", () => {
     assert.equal(session.allowedTools.includes("recordQuote"), true);
     assert.equal(session.allowedTools.includes("createMandate"), false);
     await realtime.executeTool(session.id, "recordQuote", {
-      totalPriceCents: 850000,
+      totalPrice: 8500,
+      currency: "MXN",
+      pickupDate: "2026-09-03",
+      validUntil: "2026-09-03T02:00:00.000Z",
     });
+    assert.deepEqual(toolExecutions, ["recordQuote"]);
+    await assert.rejects(
+      () => realtime.executeTool(session.id, "recordQuote", {
+        totalPriceCents: 850000,
+      }),
+      (error: unknown) =>
+        error instanceof ApiError &&
+        error.code === "VOICE_TOOL_ARGUMENTS_INVALID",
+    );
     assert.deepEqual(toolExecutions, ["recordQuote"]);
     await assert.rejects(
       () => realtime.executeTool(session.id, "createMandate", {}),
@@ -102,5 +114,15 @@ describe("RealtimeService", () => {
     assert.match(call.transcript ?? "", /HUMAN: Puedo hacerlo/);
     assert.match(call.transcript ?? "", /AGENT: Perfecto/);
     assert.equal(call.realtimeSessionId, null);
+
+    const operationsSession = await realtime.create({
+      callId: "call_realtime",
+      actorType: "INTERNAL_OPERATOR",
+      mode: "CREATE_OPERATION",
+    });
+    assert.equal(operationsSession.allowedTools.includes("startCampaign"), true);
+    assert.equal(operationsSession.allowedTools.includes("cancelOperation"), true);
+    assert.equal(operationsSession.allowedTools.includes("recordQuote"), false);
+    await realtime.close(operationsSession.id);
   });
 });

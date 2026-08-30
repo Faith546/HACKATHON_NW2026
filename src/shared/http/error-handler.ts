@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
+import { ZodError } from "zod";
 import { ApiError } from "./api-error";
 
 export interface ErrorResponse {
@@ -27,11 +28,24 @@ export const errorHandler: ErrorRequestHandler = (
 
   if (error instanceof ApiError) {
     apiError = error;
+  } else if (error instanceof ZodError) {
+    apiError = new ApiError(
+      422,
+      "VALIDATION_ERROR",
+      "La solicitud no cumple el contrato esperado.",
+      { issues: error.issues },
+    );
   } else if (error instanceof SyntaxError && "body" in error) {
     apiError = new ApiError(
       400,
       "INVALID_JSON",
       "El cuerpo de la solicitud no contiene JSON válido.",
+    );
+  } else if (isSqliteConstraintError(error)) {
+    apiError = new ApiError(
+      409,
+      "BUSINESS_CONSTRAINT_VIOLATION",
+      "La operación viola una restricción de integridad.",
     );
   } else {
     console.error("Internal Server Error:", error);
@@ -53,3 +67,14 @@ export const errorHandler: ErrorRequestHandler = (
 
   response.status(apiError.status).json(body);
 };
+
+function isSqliteConstraintError(
+  error: unknown,
+): error is Error & { code: string } {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    error.code.startsWith("SQLITE_CONSTRAINT")
+  );
+}

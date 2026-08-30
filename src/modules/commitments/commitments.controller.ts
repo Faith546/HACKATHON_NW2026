@@ -1,47 +1,98 @@
 import type { Request, Response } from "express";
-import { commitmentsRepository } from "./commitments.repository";
-import { CreateCommitmentSchema, ConfirmCommitmentSchema } from "./commitments.types";
+import type { ZodType } from "zod";
 import { ApiError } from "../../shared/http/api-error";
+import {
+  AttachEvidenceSchema,
+  AuthorizeCommitmentSchema,
+  SendSummarySchema,
+  VerbalAgreementSchema,
+  toCommitmentResponse,
+} from "./commitments.types";
+import {
+  CommitmentsService,
+  commitmentsService,
+} from "./commitments.service";
 
-export class CommitmentsController {
-  async create(req: Request, res: Response) {
-    const operationId = req.params.operationId as string;
-    
-    const parsed = CreateCommitmentSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ApiError(400, "INVALID_INPUT", "Datos de compromiso inválidos", parsed.error.format());
-    }
-
-    const actorId = req.headers["x-actor-id"] as string | undefined;
-
-    const commitment = await commitmentsRepository.createCommitment(operationId, parsed.data, actorId);
-    res.status(201).json(commitment);
+function routeParameter(
+  value: string | string[] | undefined,
+  field: string,
+): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new ApiError(422, "VALIDATION_ERROR", `${field} no es válido.`, {
+      field,
+    });
   }
-
-  async confirm(req: Request, res: Response) {
-    const commitmentId = req.params.commitmentId as string;
-    
-    const parsed = ConfirmCommitmentSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw new ApiError(400, "INVALID_INPUT", "Datos de confirmación inválidos", parsed.error.format());
-    }
-
-    const actorId = req.headers["x-actor-id"] as string | undefined;
-
-    const commitment = await commitmentsRepository.confirmCommitment(commitmentId, parsed.data, actorId);
-    res.status(200).json(commitment);
-  }
-
-  async get(req: Request, res: Response) {
-    const commitmentId = req.params.commitmentId as string;
-    const commitment = await commitmentsRepository.getCommitment(commitmentId);
-    
-    if (!commitment) {
-      throw new ApiError(404, "RESOURCE_NOT_FOUND", "Compromiso no encontrado");
-    }
-
-    res.status(200).json(commitment);
-  }
+  return value;
 }
 
-export const commitmentsController = new CommitmentsController();
+function actorId(request: Request): string | undefined {
+  const value = request.headers["x-actor-id"];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function parseBody<T>(schema: ZodType<T>, value: unknown): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    throw new ApiError(
+      422,
+      "VALIDATION_ERROR",
+      "El cuerpo de la solicitud no cumple el contrato.",
+      { issues: parsed.error.issues },
+    );
+  }
+  return parsed.data;
+}
+
+export class CommitmentsController {
+  constructor(private readonly service: CommitmentsService) {}
+
+  authorize = async (request: Request, response: Response) => {
+    const commitment = await this.service.authorizeCommitment(
+      routeParameter(request.params.operationId, "operationId"),
+      parseBody(AuthorizeCommitmentSchema, request.body),
+      actorId(request),
+    );
+    response.status(201).json(toCommitmentResponse(commitment));
+  };
+
+  list = async (request: Request, response: Response) => {
+    const history = await this.service.listCommitments(
+      routeParameter(request.params.operationId, "operationId"),
+    );
+    response.status(200).json(history.map(toCommitmentResponse));
+  };
+
+  recordVerbalAgreement = async (
+    request: Request,
+    response: Response,
+  ) => {
+    const commitment = await this.service.recordVerbalAgreement(
+      routeParameter(request.params.commitmentId, "commitmentId"),
+      parseBody(VerbalAgreementSchema, request.body),
+      actorId(request),
+    );
+    response.status(200).json(toCommitmentResponse(commitment));
+  };
+
+  attachEvidence = async (request: Request, response: Response) => {
+    const commitment = await this.service.attachEvidence(
+      routeParameter(request.params.commitmentId, "commitmentId"),
+      parseBody(AttachEvidenceSchema, request.body),
+      actorId(request),
+    );
+    response.status(200).json(toCommitmentResponse(commitment));
+  };
+
+  enqueueSummary = async (request: Request, response: Response) => {
+    const commitment = await this.service.enqueueSummary(
+      routeParameter(request.params.commitmentId, "commitmentId"),
+      parseBody(SendSummarySchema, request.body),
+      actorId(request),
+    );
+    response.status(202).json(toCommitmentResponse(commitment));
+  };
+}
+
+export const commitmentsController = new CommitmentsController(
+  commitmentsService,
+);

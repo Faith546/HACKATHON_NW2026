@@ -42,9 +42,18 @@ export class WebhooksService {
     const existing = await this.dependencies.callsService.findByProviderCallId(
       body.CallSid,
     );
-    const call =
+    let call =
       existing ??
       (await this.createInboundCall(body));
+    const receivedStatus = statusMap[body.CallStatus ?? ""];
+    if (receivedStatus && receivedStatus !== "QUEUED") {
+      call = (
+        await this.dependencies.callsService.applyProviderStatus(
+          body.CallSid,
+          receivedStatus,
+        )
+      ).call;
+    }
     const streamUrl = new URL(this.dependencies.publicWssUrl);
     if (streamUrl.protocol !== "wss:") {
       throw new ApiError(
@@ -110,7 +119,6 @@ export class WebhooksService {
       providerCallId: body.CallSid,
       fromNumber: body.From,
       toNumber: body.To,
-      status: statusMap[body.CallStatus ?? ""] ?? "QUEUED",
     });
   }
 

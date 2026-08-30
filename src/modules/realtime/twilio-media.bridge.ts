@@ -6,18 +6,21 @@ import {
   tool,
   type RealtimeItem,
 } from "@openai/agents/realtime";
-import { WebSocketServer, type WebSocket } from "ws";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { z } from "zod";
 import twilio from "twilio";
+import { ApiError } from "../../shared/http/api-error";
 import type { CallsService } from "../calls/calls.service";
-import type { CallPurpose } from "../calls/calls.types";
 import type { VoiceToolName } from "../voice/voice-core.port";
-import type { RealtimeService } from "./realtime.service";
-import type {
-  RealtimeMode,
-  RealtimeSession,
-  TranscriptSegment,
-} from "./realtime.types";
+import {
+  voiceToolDescriptions,
+  voiceToolSchemas,
+} from "../voice/voice-tools";
+import {
+  modeForCallPurpose,
+  type RealtimeService,
+} from "./realtime.service";
+import type { RealtimeSession, TranscriptSegment } from "./realtime.types";
 
 export interface TwilioMediaBridgeConfig {
   apiKey: string;
@@ -103,19 +106,61 @@ export class TwilioMediaBridge {
       webSocket.close(1011, "OpenAI configuration missing");
       return;
     }
+    // Attach Twilio's transport and a correlation listener synchronously,
+    // before any database await. Twilio can emit `start` immediately after
+    // the WebSocket upgrade and does not replay missed frames.
+    const transport = new TwilioRealtimeTransportLayer({
+      twilioWebSocket: webSocket,
+    });
+    const startMessagePromise = captureTwilioStart(webSocket);
     const call = await this.callsService.getById(callId);
+    const start = await startMessagePromise;
+    if (start.customParameters?.callId !== callId) {
+      webSocket.close(1008, "Call context mismatch");
+      throw new ApiError(
+        422,
+        "CALL_CONTEXT_MISMATCH",
+        "El callId del Media Stream no coincide con la ruta firmada.",
+      );
+    }
+    if (!start.callSid) {
+      webSocket.close(1008, "CallSid missing");
+      throw new ApiError(
+        422,
+        "CALL_PROVIDER_ID_REQUIRED",
+        "Twilio no incluyó CallSid en el evento start.",
+      );
+    }
+    await this.callsService.ensureProviderCallId(callId, start.callSid);
+    await this.callsService.applyProviderStatus(
+      start.callSid,
+      "IN_PROGRESS",
+    );
     const sessionContext = await this.realtimeService.create({
       callId,
       actorType: "CARRIER",
       carrierId: call.carrierId,
       operationId: call.operationId,
       negotiationId: call.negotiationId,
-      mode: modeForPurpose(call.purpose),
+      mode: modeForCallPurpose(call.purpose),
     });
-    const agent = createRealtimeAgent(this.realtimeService, sessionContext);
-    const transport = new TwilioRealtimeTransportLayer({
-      twilioWebSocket: webSocket,
-    });
+    let transcriptWriteChain = Promise.resolve();
+    let transcriptWriteError: unknown = null;
+    const waitForTranscript = async () => {
+      await transcriptWriteChain;
+      if (transcriptWriteError) {
+        throw new ApiError(
+          503,
+          "TRANSCRIPT_PERSISTENCE_FAILED",
+          "No se pudo persistir el transcript antes de ejecutar la tool.",
+        );
+      }
+    };
+    const agent = createRealtimeAgent(
+      this.realtimeService,
+      sessionContext,
+      waitForTranscript,
+    );
     const openAiSession = new OpenAIRealtimeSession(agent, {
       transport,
       model: this.config.model ?? "gpt-realtime",
@@ -144,15 +189,34 @@ export class TwilioMediaBridge {
 
     const callStartedAtMs = Date.now();
     const firstSeenAtByItem = new Map<string, number>();
-    let providerCallId: string | undefined;
-    let closed = false;
-    let transcriptWriteChain = Promise.resolve();
-    const close = async () => {
-      if (closed) return;
-      closed = true;
-      openAiSession.close();
-      await transcriptWriteChain;
-      await this.realtimeService.close(sessionContext.id);
+    let transportClosed = false;
+    const closeTransport = async () => {
+      if (transportClosed) return;
+      transportClosed = true;
+      try {
+        openAiSession.close();
+      } finally {
+        await transcriptWriteChain;
+      }
+      if (
+        webSocket.readyState === WebSocket.OPEN ||
+        webSocket.readyState === WebSocket.CONNECTING
+      ) {
+        webSocket.close(1000, "Realtime session closed");
+      }
+    };
+    const unregisterCloser = this.realtimeService.registerConnectionCloser(
+      sessionContext.id,
+      closeTransport,
+    );
+    let finalization: Promise<void> | null = null;
+    const close = () => {
+      finalization ??= (async () => {
+        unregisterCloser();
+        await closeTransport();
+        await this.realtimeService.close(sessionContext.id);
+      })();
+      return finalization;
     };
 
     const observe = (item: RealtimeItem, interrupted = false) => {
@@ -163,14 +227,17 @@ export class TwilioMediaBridge {
         interrupted,
       );
       if (segment) {
-        transcriptWriteChain = transcriptWriteChain
-          .then(() =>
-            this.realtimeService.appendTranscriptSegment(
+        transcriptWriteChain = transcriptWriteChain.then(async () => {
+          try {
+            await this.realtimeService.appendTranscriptSegment(
               sessionContext.id,
               segment,
-            ),
-          )
-          .catch(() => undefined);
+            );
+            transcriptWriteError = null;
+          } catch (error) {
+            transcriptWriteError = error;
+          }
+        });
       }
     };
 
@@ -180,20 +247,6 @@ export class TwilioMediaBridge {
     openAiSession.on("transport_event", (event) => {
       if (event.type !== "twilio_message") return;
       const message = event.message as TwilioMessage;
-      if (message.event === "start") {
-        providerCallId = message.start?.callSid;
-        if (providerCallId) {
-          void this.callsService
-            .ensureProviderCallId(callId, providerCallId)
-            .then(() =>
-              this.callsService.applyProviderStatus(
-                providerCallId as string,
-                "IN_PROGRESS",
-              ),
-            )
-            .catch(() => undefined);
-        }
-      }
       if (message.event === "stop") void close();
     });
     openAiSession.on("history_updated", (history) => {
@@ -219,21 +272,75 @@ export class TwilioMediaBridge {
   }
 }
 
+function captureTwilioStart(
+  webSocket: WebSocket,
+): Promise<NonNullable<TwilioMessage["start"]>> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(
+        new ApiError(
+          408,
+          "TWILIO_START_TIMEOUT",
+          "Twilio no envió el evento start dentro del tiempo esperado.",
+        ),
+      );
+    }, 10_000);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      webSocket.off("message", onMessage);
+      webSocket.off("close", onClose);
+      webSocket.off("error", onError);
+    };
+    const onMessage = (data: RawData) => {
+      try {
+        const message = JSON.parse(data.toString()) as TwilioMessage;
+        if (message.event !== "start" || !message.start) return;
+        cleanup();
+        resolve(message.start);
+      } catch {
+        // Non-JSON frames cannot be Twilio's start event; the transport owns
+        // any subsequent protocol handling.
+      }
+    };
+    const onClose = () => {
+      cleanup();
+      reject(
+        new ApiError(
+          409,
+          "TWILIO_STREAM_CLOSED",
+          "El Media Stream cerró antes de enviar start.",
+        ),
+      );
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    webSocket.on("message", onMessage);
+    webSocket.once("close", onClose);
+    webSocket.once("error", onError);
+  });
+}
+
 function createRealtimeAgent(
   service: RealtimeService,
   session: RealtimeSession,
+  beforeToolExecution: () => Promise<void>,
 ): RealtimeAgent {
   const tools = session.allowedTools.map((name) =>
     tool({
       name,
-      description: toolDescription(name),
-      parameters: z.object({}).catchall(z.unknown()),
-      execute: async (argumentsValue) =>
-        service.executeTool(
+      description: voiceToolDescriptions[name],
+      parameters: voiceToolSchemas[name] as z.ZodType<Record<string, unknown>>,
+      execute: async (argumentsValue) => {
+        await beforeToolExecution();
+        return service.executeTool(
           session.id,
           name,
           argumentsValue as Record<string, unknown>,
-        ),
+        );
+      },
     }),
   );
   return new RealtimeAgent({
@@ -253,18 +360,6 @@ La conversación propone acciones; el backend valida y cambia el estado oficial.
 Nunca reveles límites privados del mandato.
 Sólo puedes usar las tools incluidas en esta sesión.
 Si una tool falla, no afirmes que la acción se completó.`;
-}
-
-function toolDescription(name: VoiceToolName): string {
-  return `Ejecuta ${name} en el backend determinista usando exclusivamente hechos explícitos de la conversación.`;
-}
-
-function modeForPurpose(purpose: CallPurpose): RealtimeMode {
-  if (purpose === "QUOTE" || purpose === "RENEGOTIATION") return "QUOTE";
-  if (purpose === "COMMIT") return "COMMIT";
-  if (purpose === "INCIDENT" || purpose === "ESCALATION") return "INCIDENT";
-  if (purpose === "DELIVERY") return "DELIVERY";
-  return "EXECUTION";
 }
 
 function transcriptText(item: RealtimeItem): string | null {

@@ -3,8 +3,15 @@ import swaggerUi from "swagger-ui-express";
 import yaml from "yamljs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createCoreRouter } from "./modules/core/core.router";
-import { createVoiceRouter } from "./modules/voice/voice.router";
+import {
+  createCoreRouter,
+  type CreateCoreRouterOptions,
+} from "./modules/core/core.router";
+import { configureCampaignCallScheduler } from "./modules/campaigns/campaigns.service";
+import {
+  createVoiceRouter,
+  resolveVoiceRuntime,
+} from "./modules/voice/voice.router";
 import type { CreateVoiceRouterOptions } from "./modules/voice/voice.router";
 import {
   errorHandler,
@@ -18,6 +25,7 @@ const openApiPath = path.join(projectRoot, "openapi.yaml");
 
 export interface CreateAppOptions {
   apiPrefix?: string;
+  core?: CreateCoreRouterOptions;
   voice?: CreateVoiceRouterOptions;
 }
 
@@ -25,6 +33,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
   const app = express();
   const apiPrefix = options.apiPrefix ?? "/api/v1";
   const openApiDocument = yaml.load(openApiPath);
+  const voiceRuntime = resolveVoiceRuntime(options.voice);
+  configureCampaignCallScheduler(voiceRuntime.callsService);
 
   app.disable("x-powered-by");
   app.use(requestContext);
@@ -50,8 +60,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
     }),
   );
 
-  app.use(apiPrefix, createCoreRouter());
-  app.use(apiPrefix, createVoiceRouter(options.voice));
+  app.use(apiPrefix, createCoreRouter(options.core));
+  app.use(apiPrefix, createVoiceRouter({ runtime: voiceRuntime }));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

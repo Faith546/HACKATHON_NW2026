@@ -1,102 +1,111 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
-import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { eq } from "drizzle-orm";
 import { createApp } from "../src/app";
 import { db } from "../src/db";
-import { operations, mandates } from "../src/db/schema";
-import { randomUUID } from "node:crypto";
+import { mandates } from "../src/db/schema";
 
-describe("Mandates API", () => {
+describe("Mandates OpenAPI contract", () => {
   let server: Server;
   let baseUrl: string;
 
   before(async () => {
     server = createApp().listen(0, "127.0.0.1");
     await new Promise<void>((resolve) => server.once("listening", resolve));
-    const address = server.address() as AddressInfo;
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
 
   after(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
   });
 
-  it("GET /api/v1/operations/:id/mandate should return active mandate", async () => {
-    const opId = `op_${randomUUID()}`;
-    await db.insert(operations).values({
-      id: opId,
-      customerName: "Test",
-      containerNumber: "TEST1111111",
-      origin: "A",
-      destination: "B",
-    });
+  it("creates an immutable version through the canonical plural path", async () => {
+    const created = await createOperation(baseUrl);
+    const response = await fetch(
+      `${baseUrl}/api/v1/operations/${created.id}/mandates/versions`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-actor-id": "operator_mandate",
+        },
+        body: JSON.stringify({
+          maxTotalPrice: 10_250.5,
+          currency: "mxn",
+          pickupDate: "2026-09-04",
+          notes: "Nueva autorización",
+        }),
+      },
+    );
+    const mandate = await response.json();
+    assert.equal(response.status, 201, JSON.stringify(mandate));
+    assert.equal(mandate.operationId, created.id);
+    assert.equal(mandate.version, 2);
+    assert.equal(mandate.maxTotalPrice, 10_250.5);
+    assert.equal(mandate.currency, "MXN");
+    assert.equal("maxTotalPriceCents" in mandate, false);
 
-    const mandateId = `man_${randomUUID()}`;
-    await db.insert(mandates).values({
-      id: mandateId,
-      operationId: opId,
-      version: 1,
-      status: "ACTIVE",
-      maxTotalPriceCents: 500000,
-      currency: "MXN",
-      pickupDate: new Date().toISOString(),
-    });
+    const oldMandate = db
+      .select()
+      .from(mandates)
+      .where(eq(mandates.id, created.mandate.id))
+      .get();
+    assert.equal(oldMandate?.status, "SUPERSEDED");
 
-    const response = await fetch(`${baseUrl}/api/v1/operations/${opId}/mandate`);
-    assert.equal(response.status, 200);
-    const body = await response.json();
-    assert.equal(body.id, mandateId);
-    assert.equal(body.version, 1);
+    const activeResponse = await fetch(
+      `${baseUrl}/api/v1/operations/${created.id}/mandate`,
+    );
+    assert.equal(activeResponse.status, 200);
+    assert.deepEqual(await activeResponse.json(), mandate);
   });
 
-  it("POST /api/v1/operations/:id/mandate/versions should create new version", async () => {
-    const opId = `op_${randomUUID()}`;
-    await db.insert(operations).values({
-      id: opId,
-      customerName: "Test 2",
-      containerNumber: "TEST2222222",
-      origin: "A",
-      destination: "B",
-    });
-
-    const mandateId = `man_${randomUUID()}`;
-    await db.insert(mandates).values({
-      id: mandateId,
-      operationId: opId,
-      version: 1,
-      status: "ACTIVE",
-      maxTotalPriceCents: 500000,
-      currency: "MXN",
-      pickupDate: new Date().toISOString(),
-    });
-
-    const payload = {
-      maxTotalPrice: 6000, // new budget
-      currency: "MXN",
-      pickupDate: new Date().toISOString(),
-      notes: "Renegotiation needed",
-      operatorId: "usr_123",
-    };
-
-    const response = await fetch(`${baseUrl}/api/v1/operations/${opId}/mandate/versions`, {
+  it("rejects mandate changes after cancellation", async () => {
+    const created = await createOperation(baseUrl);
+    await fetch(`${baseUrl}/api/v1/operations/${created.id}/cancel`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "cancelada" }),
     });
-
-    assert.equal(response.status, 201);
-    const body = await response.json();
-    assert.equal(body.version, 2);
-    assert.equal(body.maxTotalPriceCents, 600000);
-    assert.equal(body.status, "ACTIVE");
-    assert.equal(body.notes, "Renegotiation needed");
-
-    // Old mandate should be SUPERSEDED
-    const { eq } = await import("drizzle-orm");
-    const [oldMandate] = await db.select().from(mandates).where(eq(mandates.id, mandateId));
-    assert.equal(oldMandate.status, "SUPERSEDED");
+    const response = await fetch(
+      `${baseUrl}/api/v1/operations/${created.id}/mandates/versions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          maxTotalPrice: 12_000,
+          currency: "MXN",
+          pickupDate: "2026-09-05",
+        }),
+      },
+    );
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).code, "MANDATE_CHANGE_NOT_ALLOWED");
   });
 });
+
+async function createOperation(baseUrl: string) {
+  const response = await fetch(`${baseUrl}/api/v1/operations`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      customerName: "Mandate Test",
+      containerNumber: `MANDATE-${randomUUID()}`,
+      origin: "A",
+      destination: "B",
+      service: "DRAYAGE",
+      mandate: {
+        maxTotalPrice: 9_000,
+        currency: "MXN",
+        pickupDate: "2026-09-03",
+      },
+    }),
+  });
+  const body = await response.json();
+  assert.equal(response.status, 201, JSON.stringify(body));
+  return body;
+}

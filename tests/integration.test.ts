@@ -1,102 +1,153 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { db } from "../src/db";
-import { carriers, operations, negotiations, campaigns } from "../src/db/schema";
-import { integrationService } from "../src/modules/integration/integration.service";
 import { randomUUID } from "node:crypto";
+import { describe, it } from "node:test";
+import { eq } from "drizzle-orm";
+import { db } from "../src/db";
+import {
+  campaigns,
+  carriers,
+  mandates,
+  negotiations,
+  operations,
+} from "../src/db/schema";
+import { integrationService } from "../src/modules/integration/integration.service";
 
-describe("Integration Service API", () => {
-  it("should resolve inbound call correctly based on carrier and operation", async () => {
-    const carrierPhone = `+521${Math.floor(Math.random() * 10000000)}`;
-    const carrierId = `car_${randomUUID()}`;
-    await db.insert(carriers).values({
-      id: carrierId,
-      name: "Integration Carrier",
-      dispatcherName: "Int Tester",
-      phone: carrierPhone,
-    });
+describe("IntegrationService facade", () => {
+  it("resolves the most recently updated inbound operation", async () => {
+    const suffix = randomUUID();
+    const carrierPhone = `+521${Date.now().toString().slice(-10)}`;
+    const carrierId = `car_integration_${suffix}`;
+    const olderOperationId = `op_integration_old_${suffix}`;
+    const newestOperationId = `op_integration_new_${suffix}`;
+    const campaignId = `cmp_integration_${suffix}`;
+    const negotiationId = `neg_integration_${suffix}`;
 
-    // Operation 1 (older, BOOKED)
-    const op1Id = `op_${randomUUID()}`;
-    await db.insert(operations).values({
-      id: op1Id,
-      customerName: "Op 1",
-      containerNumber: "INT1",
-      origin: "A",
-      destination: "B",
-      status: "BOOKED",
-      selectedCarrierId: carrierId,
-      updatedAt: new Date(Date.now() - 100000).toISOString(),
-    });
+    try {
+      db.insert(carriers).values({
+        id: carrierId,
+        name: "Integration Carrier",
+        dispatcherName: "Integration Tester",
+        phone: carrierPhone,
+      }).run();
+      db.insert(operations).values([
+        {
+          id: olderOperationId,
+          customerName: "Older operation",
+          containerNumber: `OLD-${suffix}`,
+          origin: "A",
+          destination: "B",
+          status: "BOOKED",
+          selectedCarrierId: carrierId,
+          updatedAt: "2026-08-29T10:00:00.000Z",
+        },
+        {
+          id: newestOperationId,
+          customerName: "Newest operation",
+          containerNumber: `NEW-${suffix}`,
+          origin: "A",
+          destination: "B",
+          status: "SOURCING",
+          updatedAt: "2026-08-29T11:00:00.000Z",
+        },
+      ]).run();
+      db.insert(mandates).values([
+        {
+          id: `man_old_${suffix}`,
+          operationId: olderOperationId,
+          version: 1,
+          status: "ACTIVE",
+          maxTotalPriceCents: 900_000,
+          currency: "MXN",
+          pickupDate: "2026-09-03",
+        },
+        {
+          id: `man_new_${suffix}`,
+          operationId: newestOperationId,
+          version: 1,
+          status: "ACTIVE",
+          maxTotalPriceCents: 900_000,
+          currency: "MXN",
+          pickupDate: "2026-09-03",
+        },
+      ]).run();
+      db.insert(campaigns).values({
+        id: campaignId,
+        operationId: newestOperationId,
+        requestedCarriers: 1,
+        maxParallelCalls: 1,
+        strategy: "LOWEST_VALID_TOTAL",
+        status: "QUEUED",
+      }).run();
+      db.insert(negotiations).values({
+        id: negotiationId,
+        operationId: newestOperationId,
+        campaignId,
+        carrierId,
+      }).run();
 
-    // Operation 2 (newer, SOURCING with negotiation)
-    const op2Id = `op_${randomUUID()}`;
-    await db.insert(operations).values({
-      id: op2Id,
-      customerName: "Op 2",
-      containerNumber: "INT2",
-      origin: "A",
-      destination: "B",
-      status: "SOURCING",
-      updatedAt: new Date().toISOString(),
-    });
-
-    const negId = `neg_${randomUUID()}`;
-    // Oh wait, campaign is required for negotiation, I must insert it
-    const campId = `camp_${randomUUID()}`;
-    await db.insert(campaigns).values({
-      id: campId,
-      operationId: op2Id,
-      requestedCarriers: 1,
-      maxParallelCalls: 1,
-      strategy: "LOWEST_VALID_TOTAL",
-      status: "QUEUED",
-    });
-
-    await db.insert(negotiations).values({
-      id: negId,
-      operationId: op2Id,
-      campaignId: campId,
-      carrierId,
-    });
-
-    const resolution = await integrationService.resolveInboundCall(carrierPhone);
-    assert.ok(resolution);
-    assert.equal(resolution.carrierId, carrierId);
-    assert.equal(resolution.operationId, op2Id); // the newest one
-    assert.equal(resolution.negotiationId, negId);
+      const resolution =
+        await integrationService.resolveInboundCall(carrierPhone);
+      assert.ok(resolution);
+      assert.equal(resolution.carrierId, carrierId);
+      assert.equal(resolution.operationId, newestOperationId);
+      assert.equal(resolution.negotiationId, negotiationId);
+      assert.equal(resolution.purpose, "QUOTE");
+    } finally {
+      db.delete(negotiations)
+        .where(eq(negotiations.id, negotiationId))
+        .run();
+      db.delete(campaigns).where(eq(campaigns.id, campaignId)).run();
+      db.delete(mandates)
+        .where(eq(mandates.operationId, newestOperationId))
+        .run();
+      db.delete(mandates)
+        .where(eq(mandates.operationId, olderOperationId))
+        .run();
+      db.delete(operations)
+        .where(eq(operations.id, newestOperationId))
+        .run();
+      db.delete(operations)
+        .where(eq(operations.id, olderOperationId))
+        .run();
+      db.delete(carriers).where(eq(carriers.id, carrierId)).run();
+    }
   });
 
-  it("should confirm pickup and delivery", async () => {
-    const opId = `op_${randomUUID()}`;
-    await db.insert(operations).values({
-      id: opId,
-      customerName: "Pickup Op",
-      containerNumber: "INT3",
-      origin: "A",
-      destination: "B",
-      status: "PICKUP_PENDING",
-    });
-
-    const pickedUp = await integrationService.confirmPickup(opId);
-    assert.equal(pickedUp.status, "PICKED_UP");
-
-    const delivered = await integrationService.confirmDelivery(opId);
-    assert.equal(delivered.status, "DELIVERED");
+  it("does not let a tool invent a negotiation outside call context", async () => {
+    await assert.rejects(
+      integrationService.executeVoiceTool({
+        name: "evaluateOffer",
+        context: {
+          callId: "call_without_negotiation",
+          operationId: "op_demo",
+          carrierId: "car_demo",
+          negotiationId: null,
+          mandateId: null,
+        },
+        arguments: {
+          totalPrice: 8_500,
+          currency: "MXN",
+          pickupDate: "2026-09-03",
+        },
+      }),
+      (error: unknown) =>
+        isApiErrorCode(error, "NEGOTIATION_CONTEXT_REQUIRED"),
+    );
   });
 
-  it("should evaluate incident change", async () => {
-    const opId = `op_${randomUUID()}`;
-    await db.insert(operations).values({
-      id: opId,
-      customerName: "Incident Op",
-      containerNumber: "INT4",
-      origin: "A",
-      destination: "B",
-      status: "IN_TRANSIT",
-    });
-
-    const escalated = await integrationService.evaluateIncidentChange(opId, { reason: "Flat tire" });
-    assert.equal(escalated.status, "ESCALATED");
+  it("returns null for an unknown inbound phone", async () => {
+    assert.equal(
+      await integrationService.resolveInboundCall("+529999999999"),
+      null,
+    );
   });
 });
+
+function isApiErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: unknown }).code === code
+  );
+}

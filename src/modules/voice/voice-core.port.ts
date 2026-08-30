@@ -23,6 +23,12 @@ export interface InboundCallResolution {
 export const voiceToolNames = [
   "createOperation",
   "createMandate",
+  "getOperationStatus",
+  "listCarriers",
+  "startCampaign",
+  "getQuotes",
+  "getCommitments",
+  "cancelOperation",
   "getActiveMandate",
   "evaluateOffer",
   "recordQuote",
@@ -47,6 +53,11 @@ export interface VoiceToolContext {
   carrierId: string | null;
   negotiationId: string | null;
   mandateId: string | null;
+  transcriptEvidence?: {
+    startMs: number;
+    endMs: number;
+    transcriptExcerpt: string;
+  };
 }
 
 export interface VoiceCorePort {

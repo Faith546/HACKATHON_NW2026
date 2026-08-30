@@ -8,6 +8,7 @@ import {
   type Call,
   type CallBrief,
   type CallBriefInput,
+  type CallLifecycleObserver,
   type CallPurpose,
   type CallScheduler,
   type CallStatus,
@@ -24,6 +25,7 @@ export interface CallsServiceDependencies {
   telephonyGateway: TelephonyGateway;
   contextResolver: OutboundCallContextResolver;
   auditWriter?: AuditWriter;
+  lifecycleObserver?: CallLifecycleObserver;
   now?: () => Date;
   createId?: () => string;
 }
@@ -43,9 +45,24 @@ function persistedPurpose(purpose: EnqueueOutboundCallInput["purpose"]): CallPur
   return purpose === "FOLLOW_UP" ? "EXECUTION" : purpose;
 }
 
+interface CampaignDispatchState {
+  operationId: string;
+  maxParallelCalls: number;
+  pending: Array<{
+    negotiationId: string;
+    carrierId: string;
+    phone: string;
+  }>;
+  activeCallIds: Set<string>;
+  pumping: boolean;
+}
+
 export class CallsService implements CallScheduler {
   private readonly now: () => Date;
   private readonly createId: () => string;
+  private readonly campaignDispatches = new Map<string, CampaignDispatchState>();
+  private readonly campaignIdByCallId = new Map<string, string>();
+  private readonly scheduledCampaignIds = new Set<string>();
 
   constructor(private readonly dependencies: CallsServiceDependencies) {
     this.now = dependencies.now ?? (() => new Date());
@@ -56,6 +73,7 @@ export class CallsService implements CallScheduler {
   async enqueueOutbound(
     input: EnqueueOutboundCallInput,
     resolvedContext?: OutboundCallContext,
+    beforeDispatch?: (call: Call) => void,
   ): Promise<Call> {
     const operationId = requiredIdentifier(input.operationId, "operationId");
     const carrierId = requiredIdentifier(input.carrierId, "carrierId");
@@ -112,6 +130,7 @@ export class CallsService implements CallScheduler {
       },
     });
 
+    beforeDispatch?.(structuredClone(call));
     let providerCallId: string | null = null;
     this.dependencies.queue.enqueue({
       id: call.id,
@@ -142,20 +161,42 @@ export class CallsService implements CallScheduler {
         });
       },
       onExhausted: async (error) => {
+        // Once Twilio accepted a call, a later persistence/audit failure must
+        // never overwrite its live lifecycle as FAILED or trigger a redial.
+        if (providerCallId !== null) return;
+        const current = await this.dependencies.repository.findById(call.id);
+        if (!current || terminalCallStatuses.has(current.status)) return;
         const endedAt = this.now().toISOString();
-        await this.dependencies.repository.setStatus(call.id, "FAILED", endedAt);
-        await this.dependencies.auditWriter?.record({
-          operationId,
-          eventType: "CALL_FAILED",
-          actorType: "SYSTEM",
-          callId: call.id,
-          entityType: "CALL",
-          entityId: call.id,
-          payload: {
-            message: error instanceof Error ? error.message : String(error),
-            providerCallId,
-          },
-        });
+        const failed = await this.dependencies.repository.setStatus(
+          call.id,
+          "FAILED",
+          endedAt,
+        );
+        try {
+          await this.dependencies.auditWriter?.record({
+            operationId,
+            eventType: "CALL_FAILED",
+            actorType: "SYSTEM",
+            callId: call.id,
+            entityType: "CALL",
+            entityId: call.id,
+            payload: {
+              message:
+                error instanceof Error ? error.message : String(error),
+              providerCallId,
+            },
+          });
+        } finally {
+          try {
+            await this.dependencies.lifecycleObserver?.onStatusChanged({
+              call: failed,
+              previousStatus: current.status,
+              changed: true,
+            });
+          } finally {
+            await this.releaseCampaignSlot(failed.id);
+          }
+        }
       },
     });
 
@@ -165,6 +206,7 @@ export class CallsService implements CallScheduler {
   async enqueueQuoteCalls(input: {
     operationId: string;
     campaignId: string;
+    maxParallelCalls: number;
     negotiations: Array<{
       negotiationId: string;
       carrierId: string;
@@ -172,17 +214,82 @@ export class CallsService implements CallScheduler {
     }>;
   }): Promise<void> {
     requiredIdentifier(input.campaignId, "campaignId");
-    for (const negotiation of input.negotiations) {
-      await this.enqueueOutbound(
-        {
-          operationId: input.operationId,
-          carrierId: negotiation.carrierId,
-          negotiationId: negotiation.negotiationId,
-          purpose: "QUOTE",
-        },
-        { toNumber: requiredIdentifier(negotiation.phone, "phone") },
+    if (
+      !Number.isInteger(input.maxParallelCalls) ||
+      input.maxParallelCalls < 1 ||
+      input.maxParallelCalls > 3
+    ) {
+      throw new ApiError(
+        422,
+        "VALIDATION_ERROR",
+        "maxParallelCalls debe ser un entero entre 1 y 3.",
+        { field: "maxParallelCalls" },
       );
     }
+    if (this.scheduledCampaignIds.has(input.campaignId)) return;
+    const pending = input.negotiations.map((negotiation) => ({
+      negotiationId: requiredIdentifier(
+        negotiation.negotiationId,
+        "negotiationId",
+      ),
+      carrierId: requiredIdentifier(negotiation.carrierId, "carrierId"),
+      phone: requiredIdentifier(negotiation.phone, "phone"),
+    }));
+    this.scheduledCampaignIds.add(input.campaignId);
+    this.campaignDispatches.set(input.campaignId, {
+      operationId: requiredIdentifier(input.operationId, "operationId"),
+      maxParallelCalls: input.maxParallelCalls,
+      pending,
+      activeCallIds: new Set(),
+      pumping: false,
+    });
+    await this.pumpCampaign(input.campaignId);
+  }
+
+  private async pumpCampaign(campaignId: string): Promise<void> {
+    const dispatch = this.campaignDispatches.get(campaignId);
+    if (!dispatch || dispatch.pumping) return;
+    dispatch.pumping = true;
+    try {
+      while (
+        dispatch.activeCallIds.size < dispatch.maxParallelCalls &&
+        dispatch.pending.length > 0
+      ) {
+        const negotiation = dispatch.pending.shift();
+        if (!negotiation) break;
+        await this.enqueueOutbound(
+          {
+            operationId: dispatch.operationId,
+            carrierId: negotiation.carrierId,
+            negotiationId: negotiation.negotiationId,
+            purpose: "QUOTE",
+          },
+          { toNumber: negotiation.phone },
+          (call) => {
+            dispatch.activeCallIds.add(call.id);
+            this.campaignIdByCallId.set(call.id, campaignId);
+          },
+        );
+      }
+    } finally {
+      dispatch.pumping = false;
+      if (
+        dispatch.pending.length === 0 &&
+        dispatch.activeCallIds.size === 0
+      ) {
+        this.campaignDispatches.delete(campaignId);
+      }
+    }
+  }
+
+  private async releaseCampaignSlot(callId: string): Promise<void> {
+    const campaignId = this.campaignIdByCallId.get(callId);
+    if (!campaignId) return;
+    this.campaignIdByCallId.delete(callId);
+    const dispatch = this.campaignDispatches.get(campaignId);
+    if (!dispatch) return;
+    dispatch.activeCallIds.delete(callId);
+    await this.pumpCampaign(campaignId);
   }
 
   async getById(callId: string): Promise<Call> {
@@ -215,7 +322,26 @@ export class CallsService implements CallScheduler {
       );
     }
     if (call.twilioCallSid === providerCallId) return call;
-    return this.dependencies.repository.setProviderCallId(callId, providerCallId);
+    try {
+      return await this.dependencies.repository.setProviderCallId(
+        callId,
+        providerCallId,
+      );
+    } catch (error) {
+      const owner =
+        await this.dependencies.repository.findByProviderCallId(
+          providerCallId,
+        );
+      if (owner && owner.id !== callId) {
+        throw new ApiError(
+          409,
+          "CALL_PROVIDER_ID_CONFLICT",
+          "El CallSid ya pertenece a otra llamada interna.",
+          { callId, actualCallId: owner.id, providerCallId },
+        );
+      }
+      throw error;
+    }
   }
 
   async createOrGetInbound(input: CreateInboundCallInput): Promise<Call> {
@@ -237,7 +363,7 @@ export class CallsService implements CallScheduler {
       realtimeSessionId: null,
       direction: "INBOUND",
       purpose: input.purpose,
-      status: input.status ?? "QUEUED",
+      status: "QUEUED",
       fromNumber: requiredIdentifier(input.fromNumber, "fromNumber"),
       toNumber: requiredIdentifier(input.toNumber, "toNumber"),
       transcript: null,
@@ -246,7 +372,16 @@ export class CallsService implements CallScheduler {
       endedAt: null,
       createdAt: this.now().toISOString(),
     };
-    await this.dependencies.repository.insert(call);
+    try {
+      await this.dependencies.repository.insert(call);
+    } catch (error) {
+      const concurrent =
+        await this.dependencies.repository.findByProviderCallId(
+          providerCallId,
+        );
+      if (concurrent) return concurrent;
+      throw error;
+    }
     await this.dependencies.auditWriter?.record({
       operationId: call.operationId,
       eventType: "CALL_RECEIVED",
@@ -271,21 +406,27 @@ export class CallsService implements CallScheduler {
     return this.dependencies.repository.setRealtimeSessionId(callId, sessionId);
   }
 
-  async saveTranscript(callId: string, transcript: string): Promise<Call> {
+  async saveTranscript(
+    callId: string,
+    transcript: string,
+    options: { audit?: boolean } = {},
+  ): Promise<Call> {
     const call = await this.getById(callId);
     const updated = await this.dependencies.repository.saveTranscript(
       callId,
       transcript.trim(),
     );
-    await this.dependencies.auditWriter?.record({
-      operationId: call.operationId,
-      eventType: "TRANSCRIPT_SAVED",
-      actorType: "SYSTEM",
-      callId,
-      entityType: "CALL",
-      entityId: callId,
-      payload: { characterCount: transcript.trim().length },
-    });
+    if (options.audit !== false) {
+      await this.dependencies.auditWriter?.record({
+        operationId: call.operationId,
+        eventType: "TRANSCRIPT_SAVED",
+        actorType: "SYSTEM",
+        callId,
+        entityType: "CALL",
+        entityId: callId,
+        payload: { characterCount: transcript.trim().length },
+      });
+    }
     return updated;
   }
 
@@ -302,7 +443,20 @@ export class CallsService implements CallScheduler {
         { providerCallId },
       );
     }
-    if (current.status === nextStatus) return { call: current, changed: false };
+    if (current.status === nextStatus) {
+      try {
+        await this.dependencies.lifecycleObserver?.onStatusChanged({
+          call: current,
+          previousStatus: current.status,
+          changed: false,
+        });
+      } finally {
+        if (terminalCallStatuses.has(current.status)) {
+          await this.releaseCampaignSlot(current.id);
+        }
+      }
+      return { call: current, changed: false };
+    }
     if (!isAllowedStatusTransition(current.status, nextStatus)) {
       return { call: current, changed: false };
     }
@@ -333,6 +487,17 @@ export class CallsService implements CallScheduler {
         entityId: result.call.id,
         payload: { previousStatus: current.status, status: nextStatus },
       });
+    }
+    try {
+      await this.dependencies.lifecycleObserver?.onStatusChanged({
+        call: result.call,
+        previousStatus: current.status,
+        changed: result.changed,
+      });
+    } finally {
+      if (terminalCallStatuses.has(result.call.status)) {
+        await this.releaseCampaignSlot(result.call.id);
+      }
     }
     return result;
   }

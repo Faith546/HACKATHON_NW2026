@@ -7,6 +7,7 @@ services deterministas validan, persisten y cambian el estado oficial.
 
 ```powershell
 npm install
+npm run db:migrate
 npm start
 ```
 

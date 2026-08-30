@@ -10,6 +10,7 @@ import {
 } from "../calls/calls.repository";
 import { CallsService } from "../calls/calls.service";
 import type {
+  CallLifecycleObserver,
   OutboundCallContextResolver,
   TelephonyGateway,
 } from "../calls/calls.types";
@@ -78,6 +79,7 @@ export interface VoiceRuntime {
   callsService: CallsService;
   realtimeService: RealtimeService;
   webhooksService: WebhooksService;
+  queue: InMemoryJobQueue;
   publicBaseUrl: string;
   publicWssUrl: string;
 }
@@ -92,6 +94,7 @@ export interface CreateVoiceRuntimeOptions {
   voiceCore?: VoiceCorePort;
   auditWriter?: AuditWriter;
   signatureValidator?: TwilioSignatureValidator;
+  lifecycleObserver?: CallLifecycleObserver;
   publicBaseUrl?: string;
   publicWssUrl?: string;
   requireValidTwilioSignature?: boolean;
@@ -116,20 +119,22 @@ export function createVoiceRuntime(
   };
   const telephonyGateway =
     options.telephonyGateway ??
-    (options.voiceCore
+    (options.voiceCore && process.env.VOICE_RUNTIME_MODE === "twilio"
       ? configuredTwilioGateway(publicBaseUrl, publicWssUrl)
       : null) ??
     new FakeTelephonyGateway();
+  const queue =
+    options.queue ??
+    new InMemoryJobQueue({ concurrency: 3, maxRetries: 2 });
   const callsService =
     options.callsService ??
     new CallsService({
       repository: options.repository ?? new InMemoryCallRepository(),
-      queue:
-        options.queue ??
-        new InMemoryJobQueue({ concurrency: 3, maxRetries: 2 }),
+      queue,
       telephonyGateway,
       contextResolver,
       auditWriter,
+      lifecycleObserver: options.lifecycleObserver,
     });
   const realtimeService =
     options.realtimeService ??
@@ -160,6 +165,7 @@ export function createVoiceRuntime(
     callsService,
     realtimeService,
     webhooksService,
+    queue,
     publicBaseUrl,
     publicWssUrl,
   };

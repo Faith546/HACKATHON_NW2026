@@ -33,6 +33,10 @@ export class TwilioSmsSummarySender implements SummarySender {
       client ?? twilio(config.accountSid, config.authToken);
   }
 
+  supports(channel: "SMS" | "EMAIL"): boolean {
+    return channel === "SMS";
+  }
+
   async send(input: {
     channel: "SMS" | "EMAIL";
     recipient: string;

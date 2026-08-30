@@ -265,8 +265,8 @@ No hay autenticación real en el contrato de la demo. `OPENAI_API_KEY` y las cre
 | Ejecución | `POST /api/v1/operations/{operationId}/delivery/confirm` | Confirmar entrega. |
 | Post-call | `POST /api/v1/calls/{callId}/brief` | Guardar call brief. |
 | Auditoría | `GET /api/v1/operations/{operationId}/audit-events` | Consultar timeline. |
-| Twilio | `POST /webhooks/twilio/voice` | Llamada entrante. |
-| Twilio | `POST /webhooks/twilio/status` | Estado de llamada. |
+| Twilio | `POST /api/v1/webhooks/twilio/voice` | Llamada entrante. |
+| Twilio | `POST /api/v1/webhooks/twilio/status` | Estado de llamada. |
 
 ## 8. Flujo 1: preparar la demo
 
@@ -360,7 +360,7 @@ telephonyService.startOutboundCall(callId)
 No se llama un endpoint interno. Twilio crea la llamada PSTN y usa:
 
 ```http
-POST /webhooks/twilio/status
+POST /api/v1/webhooks/twilio/status
 ```
 
 para reportar `ringing`, `in-progress`, `completed` o errores.
@@ -434,7 +434,7 @@ La quote guarda precio total, moneda, fecha, notas, vigencia, llamada y una FK `
 Twilio reporta el fin mediante:
 
 ```http
-POST /webhooks/twilio/status
+POST /api/v1/webhooks/twilio/status
 ```
 
 El gateway cierra su contexto mediante el service interno o, para una prueba HTTP:
@@ -537,10 +537,10 @@ GET /api/v1/operations/{operationId}/audit-events
 Twilio llama:
 
 ```http
-POST /webhooks/twilio/voice
+POST /api/v1/webhooks/twilio/voice
 ```
 
-El backend busca el carrier por `From`. Si hay varias operaciones activas, el agente pide contenedor o ruta para desambiguar. El backend devuelve TwiML que conecta el Media Stream.
+El backend busca el carrier por `From`. Si hay varias operaciones activas, usa la de `updatedAt` más reciente; el agente confirma contenedor y ruta al inicio de la conversación antes de ejecutar tools. Después devuelve TwiML que conecta el Media Stream.
 
 ### Paso 6.2: crear sesión INCIDENT
 

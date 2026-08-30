@@ -89,7 +89,7 @@ describe("DrizzleVoiceCoreAdapter", () => {
     }
   });
 
-  it("resolves exactly one active inbound operation", async () => {
+  it("resolves an active inbound sourcing operation as a quote call", async () => {
     const { sqlite, adapter } = fixture();
     try {
       assert.deepEqual(
@@ -101,9 +101,67 @@ describe("DrizzleVoiceCoreAdapter", () => {
           operationId: "op_1",
           carrierId: "car_1",
           negotiationId: "neg_1",
-          purpose: "RENEGOTIATION",
+          purpose: "QUOTE",
         },
       );
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("selects the most recently updated inbound operation", async () => {
+    const { sqlite, adapter } = fixture();
+    try {
+      sqlite.exec(`
+        INSERT INTO operations VALUES (
+          'op_2', 'Textiles 2', 'TCLU7654321', 'Manzanillo', 'Monterrey',
+          'DRAYAGE', 'BOOKED', 'car_1', NULL,
+          '2026-08-29T00:00:00Z', '2026-08-30T00:00:00Z'
+        );
+      `);
+      assert.deepEqual(
+        await adapter.resolveInboundCallContext({
+          fromNumber: "+525500000001",
+          toNumber: "+525500000002",
+        }),
+        {
+          operationId: "op_2",
+          carrierId: "car_1",
+          negotiationId: null,
+          purpose: "EXECUTION",
+        },
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("delegates allowed voice tools to the official executor", async () => {
+    const sqlite = new Database(":memory:");
+    const executions: string[] = [];
+    try {
+      const adapter = new DrizzleVoiceCoreAdapter(
+        drizzle(sqlite, { schema }),
+        async ({ name }) => {
+          executions.push(name);
+          return { ok: true };
+        },
+      );
+      assert.deepEqual(
+        await adapter.executeVoiceTool({
+          name: "getOperation",
+          context: {
+            callId: "call_1",
+            operationId: "op_1",
+            carrierId: null,
+            negotiationId: null,
+            mandateId: null,
+          },
+          arguments: {},
+        }),
+        { ok: true },
+      );
+      assert.deepEqual(executions, ["getOperation"]);
     } finally {
       sqlite.close();
     }

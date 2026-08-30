@@ -20,9 +20,10 @@ export interface CreateVoiceRouterOptions {
   runtimeOptions?: CreateVoiceRuntimeOptions;
 }
 
-export function createVoiceRouter(options: CreateVoiceRouterOptions = {}): Router {
-  const router = Router();
-  const runtime =
+export function resolveVoiceRuntime(
+  options: CreateVoiceRouterOptions = {},
+): VoiceRuntime {
+  return (
     options.runtime ??
     createVoiceRuntime({
       ...options.runtimeOptions,
@@ -33,7 +34,13 @@ export function createVoiceRouter(options: CreateVoiceRouterOptions = {}): Route
         options.webhooksService ?? options.runtimeOptions?.webhooksService,
       publicBaseUrl:
         options.publicBaseUrl ?? options.runtimeOptions?.publicBaseUrl,
-    });
+    })
+  );
+}
+
+export function createVoiceRouter(options: CreateVoiceRouterOptions = {}): Router {
+  const router = Router();
+  const runtime = resolveVoiceRuntime(options);
 
   router.use(createCallsRouter(runtime.callsService));
   router.use(createRealtimeRouter(runtime.realtimeService));
