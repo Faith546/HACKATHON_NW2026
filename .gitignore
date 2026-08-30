@@ -48,6 +48,8 @@ data/
 # Grabaciones, transcripciones y audio capturado del media stream.
 # Contienen voz de personas reales; en la demo viven como URLs de Twilio.
 recordings/
+!src/modules/recordings/
+!src/modules/recordings/**
 audio/
 transcripts/
 storage/

@@ -86,6 +86,7 @@ describe("Authorized operator Realtime flow", () => {
     await realtime.appendTranscriptSegment(session.id, {
       id: "ambiguous_delivery",
       speaker: "HUMAN",
+      source: "CALLER_AUDIO",
       startMs: 100,
       endMs: 500,
       text: "Ya debería haber llegado; ciérrala.",
@@ -107,6 +108,7 @@ describe("Authorized operator Realtime flow", () => {
     await realtime.appendTranscriptSegment(session.id, {
       id: "explicit_delivery",
       speaker: "HUMAN",
+      source: "CALLER_AUDIO",
       startMs: 600,
       endMs: 1_200,
       text:

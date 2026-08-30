@@ -94,4 +94,70 @@ describe("SQLite migration baseline", () => {
     );
     sqlite.close();
   });
+
+  it("upgrades the current main database to Voice without losing calls", () => {
+    const sqlite = new Database(":memory:");
+    const migrations = readMigrationFiles({ migrationsFolder });
+    assert.equal(migrations.length, 5);
+    for (const migration of migrations.slice(0, 4)) {
+      for (const statement of migration.sql) {
+        if (statement.trim()) sqlite.exec(statement);
+      }
+    }
+    sqlite.prepare(`
+      INSERT INTO operations (
+        id, customer_name, container_number, origin, destination, service,
+        status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "op_upgrade",
+      "Upgrade test",
+      "CONT-UPGRADE",
+      "Origen",
+      "Destino",
+      "DRAYAGE",
+      "SOURCING",
+      "2026-08-29T12:00:00.000Z",
+      "2026-08-29T12:00:00.000Z",
+    );
+    sqlite.prepare(`
+      INSERT INTO calls (
+        id, operation_id, direction, purpose, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      "call_upgrade",
+      "op_upgrade",
+      "INBOUND",
+      "QUOTE",
+      "IN_PROGRESS",
+      "2026-08-29T12:01:00.000Z",
+    );
+
+    for (const statement of migrations[4]!.sql) {
+      if (statement.trim()) sqlite.exec(statement);
+    }
+
+    const call = sqlite
+      .prepare("SELECT id, actor_type, twilio_stream_sid, recording_sid FROM calls WHERE id = ?")
+      .get("call_upgrade") as Record<string, unknown>;
+    assert.deepEqual(call, {
+      id: "call_upgrade",
+      actor_type: "CARRIER",
+      twilio_stream_sid: null,
+      recording_sid: null,
+    });
+    const operationIdColumn = sqlite
+      .prepare("PRAGMA table_info(calls)")
+      .all()
+      .find((column) => (column as { name: string }).name === "operation_id") as
+      | { notnull: number }
+      | undefined;
+    assert.equal(operationIdColumn?.notnull, 0);
+    assert.ok(
+      sqlite
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'call_timing_events'")
+        .get(),
+    );
+    sqlite.close();
+  });
 });

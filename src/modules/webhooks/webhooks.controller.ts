@@ -3,6 +3,7 @@ import { ApiError } from "../../shared/http/api-error";
 import type { WebhooksService } from "./webhooks.service";
 import type {
   TwilioStatusWebhook,
+  TwilioRecordingStatusWebhook,
   TwilioVoiceWebhook,
   TwilioWebhookRequest,
 } from "./webhooks.types";
@@ -60,6 +61,21 @@ export class WebhooksController {
       ? request.query.callId
       : undefined;
     await this.service.receiveStatus(body, twilioRequest, callId);
+    response.status(204).send();
+  };
+
+  receiveRecordingStatus = async (request: Request, response: Response) => {
+    const parameters = formParameters(request.body);
+    const twilioRequest = this.twilioRequest(request, parameters);
+    const body: TwilioRecordingStatusWebhook = {
+      CallSid: required(parameters, "CallSid"),
+      RecordingSid: required(parameters, "RecordingSid"),
+      RecordingStatus: required(parameters, "RecordingStatus"),
+      RecordingUrl: parameters.RecordingUrl,
+      RecordingDuration: parameters.RecordingDuration,
+    };
+    const callId = typeof request.query.callId === "string" ? request.query.callId : undefined;
+    await this.service.receiveRecordingStatus(body, twilioRequest, callId);
     response.status(204).send();
   };
 

@@ -1,7 +1,7 @@
 import { marketRepository } from "./market.repository";
 import type {
   EvaluateQuoteInput,
-  SaveQuoteInput,
+  GroundedSaveQuoteInput,
   SelectQuoteInput,
 } from "./market.types";
 import { toQuoteResponse } from "./market.types";
@@ -17,7 +17,7 @@ export class MarketService {
 
   async recordQuote(
     negotiationId: string,
-    input: SaveQuoteInput,
+    input: GroundedSaveQuoteInput,
     actorId?: string,
   ) {
     return toQuoteResponse(

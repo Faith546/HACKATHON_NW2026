@@ -3,9 +3,11 @@ import type { CallsService } from "../calls/calls.service";
 import type { CallStatus } from "../calls/calls.types";
 import { createMediaStreamTwiml } from "../calls/twilio-twiml";
 import type { VoiceCorePort } from "../voice/voice-core.port";
+import type { RecordingService } from "../recordings/recordings.service";
 import type {
   TwilioSignatureValidator,
   TwilioStatusWebhook,
+  TwilioRecordingStatusWebhook,
   TwilioVoiceWebhook,
   TwilioWebhookRequest,
 } from "./webhooks.types";
@@ -29,6 +31,7 @@ export interface WebhooksServiceDependencies {
   signatureValidator: TwilioSignatureValidator;
   publicWssUrl: string;
   requireValidSignature?: boolean;
+  recordingService?: RecordingService;
 }
 
 export class WebhooksService {
@@ -107,6 +110,34 @@ export class WebhooksService {
       }
     }
     await this.dependencies.callsService.applyProviderStatus(body.CallSid, status);
+  }
+
+  async receiveRecordingStatus(
+    body: TwilioRecordingStatusWebhook,
+    request: TwilioWebhookRequest,
+    internalCallId?: string,
+  ): Promise<void> {
+    this.validateSignature(request);
+    if (!internalCallId) {
+      throw new ApiError(422, "VALIDATION_ERROR", "callId es obligatorio para recording.");
+    }
+    const duration = body.RecordingDuration === undefined
+      ? undefined
+      : Number(body.RecordingDuration);
+    if (duration !== undefined && (!Number.isFinite(duration) || duration < 0)) {
+      throw new ApiError(422, "VALIDATION_ERROR", "RecordingDuration no es válido.");
+    }
+    if (!this.dependencies.recordingService) {
+      throw new ApiError(503, "RECORDING_NOT_CONFIGURED", "Recording no está configurado.");
+    }
+    await this.dependencies.recordingService.receiveStatus({
+      callId: internalCallId,
+      callSid: body.CallSid,
+      recordingSid: body.RecordingSid,
+      status: body.RecordingStatus,
+      recordingUrl: body.RecordingUrl,
+      durationSeconds: duration,
+    });
   }
 
   private async createInboundCall(body: TwilioVoiceWebhook) {

@@ -11,6 +11,8 @@ import { z } from "zod";
 import twilio from "twilio";
 import { ApiError } from "../../shared/http/api-error";
 import type { CallsService } from "../calls/calls.service";
+import type { RecordingService } from "../recordings/recordings.service";
+import type { TimingService } from "../timing/timing.service";
 import type { VoiceToolName } from "../voice/voice-core.port";
 import {
   voiceToolDescriptions,
@@ -52,6 +54,8 @@ export class TwilioMediaBridge {
   constructor(
     private readonly callsService: CallsService,
     private readonly realtimeService: RealtimeService,
+    private readonly recordingService: RecordingService,
+    private readonly timingService: TimingService,
     private readonly config: TwilioMediaBridgeConfig,
   ) {}
 
@@ -120,27 +124,42 @@ export class TwilioMediaBridge {
     const startMessagePromise = captureTwilioStart(webSocket);
     const call = await this.callsService.getById(callId);
     const start = await startMessagePromise;
-    if (start.customParameters?.callId !== callId) {
+    let identity: { callSid: string; streamSid: string };
+    try {
+      identity = validateTwilioStartContext(callId, start);
+      await this.callsService.ensureStreamIdentity(
+        callId,
+        identity.callSid,
+        identity.streamSid,
+      );
+    } catch (error) {
       webSocket.close(1008, "Call context mismatch");
-      throw new ApiError(
-        422,
-        "CALL_CONTEXT_MISMATCH",
-        "El callId del Media Stream no coincide con la ruta firmada.",
-      );
+      throw error;
     }
-    if (!start.callSid) {
-      webSocket.close(1008, "CallSid missing");
-      throw new ApiError(
-        422,
-        "CALL_PROVIDER_ID_REQUIRED",
-        "Twilio no incluyó CallSid en el evento start.",
-      );
-    }
-    await this.callsService.ensureProviderCallId(callId, start.callSid);
     await this.callsService.applyProviderStatus(
-      start.callSid,
+      identity.callSid,
       "IN_PROGRESS",
     );
+    await this.recordingService.start(callId);
+    await this.timingService.record({
+      callId,
+      streamSid: identity.streamSid,
+      clock: "recording",
+      eventType: "RECORDING_REQUEST_OBSERVED",
+      rawTimestampMs: Date.now(),
+      metadata: {
+        correlationStatus: "UNRESOLVED",
+        reason: "RECORDING_START_OFFSET_UNKNOWN",
+      },
+    });
+    await this.timingService.record({
+      callId,
+      streamSid: identity.streamSid,
+      clock: "local_observation",
+      eventType: "MEDIA_STREAM_ACCEPTED",
+      rawTimestampMs: Date.now(),
+      metadata: { callSid: identity.callSid },
+    });
     const sessionContext = await this.realtimeService.create({
       callId,
       actorType: call.actorType,
@@ -223,6 +242,7 @@ export class TwilioMediaBridge {
     const callStartedAtMs = Date.now();
     const firstSeenAtByItem = new Map<string, number>();
     let transportClosed = false;
+    let firstTwilioMediaSeen = false;
     const closeTransport = async () => {
       if (transportClosed) return;
       transportClosed = true;
@@ -297,6 +317,11 @@ export class TwilioMediaBridge {
     const reportCloseFailure = (error: unknown) => {
       console.error("[REALTIME_CLOSE_FAILED]", error);
     };
+    const recordTiming = (input: Parameters<TimingService["record"]>[0]) => {
+      void this.timingService.record(input).catch((error) => {
+        console.error("[TIMING_PERSISTENCE_FAILED]", error);
+      });
+    };
     webSocket.once("close", () => void close().catch(reportCloseFailure));
     webSocket.once("error", () => void close().catch(reportCloseFailure));
 
@@ -307,10 +332,26 @@ export class TwilioMediaBridge {
       ) {
         const speechEvent = event as any;
         if (speechEvent.type === "input_audio_buffer.speech_started") {
+          recordTiming({
+            callId,
+            streamSid: identity.streamSid,
+            clock: "openai_input",
+            eventType: "CALLER_SPEECH_STARTED",
+            rawTimestampMs: Number(speechEvent.audio_start_ms),
+            itemId: speechEvent.item_id,
+          });
           console.info(
             `[TIMING] caller speech started\\nClock: openai_input\\nItemId: ${speechEvent.item_id}\\nStart: ${speechEvent.audio_start_ms}`,
           );
         } else {
+          recordTiming({
+            callId,
+            streamSid: identity.streamSid,
+            clock: "openai_input",
+            eventType: "CALLER_SPEECH_STOPPED",
+            rawTimestampMs: Number(speechEvent.audio_end_ms),
+            itemId: speechEvent.item_id,
+          });
           console.info(
             `[TIMING] caller speech stopped\\nClock: openai_input\\nItemId: ${speechEvent.item_id}\\nEnd: ${speechEvent.audio_end_ms}`,
           );
@@ -331,9 +372,26 @@ export class TwilioMediaBridge {
         console.info(`[TWILIO] StreamSid: ${streamSid ?? "unknown"}`);
       }
       if (message.event === "media" && message.media && message.streamSid) {
-        // Here we could track firstMediaLogged if needed
+        if (!firstTwilioMediaSeen) {
+          firstTwilioMediaSeen = true;
+          recordTiming({
+            callId,
+            streamSid: identity.streamSid,
+            clock: "twilio_stream",
+            eventType: "FIRST_MEDIA",
+            rawTimestampMs: Number(message.media.timestamp ?? 0),
+            metadata: { track: message.media.track ?? null },
+          });
+        }
       }
       if (message.event === "stop") {
+        recordTiming({
+          callId,
+          streamSid: identity.streamSid,
+          clock: "local_observation",
+          eventType: "MEDIA_STREAM_STOP_OBSERVED",
+          rawTimestampMs: Date.now(),
+        });
         console.info("[TWILIO] stop");
         void close().catch(reportCloseFailure);
       }
@@ -361,6 +419,22 @@ export class TwilioMediaBridge {
   }
 }
 
+export function validateTwilioStartContext(
+  expectedCallId: string,
+  start: NonNullable<TwilioMessage["start"]>,
+): { callSid: string; streamSid: string } {
+  if (start.customParameters?.callId !== expectedCallId) {
+    throw new ApiError(422, "CALL_CONTEXT_MISMATCH", "El callId del Media Stream no coincide con la ruta firmada.");
+  }
+  if (!start.callSid) {
+    throw new ApiError(422, "CALL_PROVIDER_ID_REQUIRED", "Twilio no incluyó CallSid en el evento start.");
+  }
+  if (!start.streamSid) {
+    throw new ApiError(422, "STREAM_ID_REQUIRED", "Twilio no incluyó StreamSid en el evento start.");
+  }
+  return { callSid: start.callSid, streamSid: start.streamSid };
+}
+
 function captureTwilioStart(
   webSocket: WebSocket,
 ): Promise<NonNullable<TwilioMessage["start"]>> {
@@ -386,7 +460,10 @@ function captureTwilioStart(
         const message = JSON.parse(data.toString()) as TwilioMessage;
         if (message.event !== "start" || !message.start) return;
         cleanup();
-        resolve(message.start);
+        resolve({
+          ...message.start,
+          streamSid: message.start.streamSid ?? message.streamSid,
+        });
       } catch {
         // Non-JSON frames cannot be Twilio's start event; the transport owns
         // any subsequent protocol handling.
@@ -538,7 +615,14 @@ function transcriptSegment(
   interrupted: boolean,
 ): TranscriptSegment | null {
   if (item.type !== "message" || item.role === "system") return null;
-  const text = transcriptText(item);
+  const source = transcriptSource(item);
+  const text = source === "CALLER_AUDIO"
+    ? item.content
+        .map((content) => "transcript" in content ? content.transcript : null)
+        .filter((value): value is string => Boolean(value?.trim()))
+        .join(" ")
+        .trim()
+    : transcriptText(item);
   if (!text) return null;
   const nowOffset = Math.max(0, Date.now() - callStartedAtMs);
   const startMs = firstSeenAtByItem.get(item.itemId) ?? nowOffset;
@@ -546,10 +630,25 @@ function transcriptSegment(
   return {
     id: item.itemId,
     speaker: item.role === "user" ? "HUMAN" : "AGENT",
+    source,
     startMs,
     endMs: Math.max(startMs + 1, nowOffset),
     text,
     final: item.status !== "in_progress",
     interrupted: interrupted || item.status === "incomplete",
   };
+}
+
+function transcriptSource(
+  item: RealtimeItem,
+): TranscriptSegment["source"] {
+  if (item.type !== "message" || item.role === "system") {
+    return "PROGRAMMATIC_TEXT";
+  }
+  if (item.role === "assistant") return "AGENT_AUDIO";
+  return item.content.some(
+    (content) => "transcript" in content && Boolean(content.transcript?.trim()),
+  )
+    ? "CALLER_AUDIO"
+    : "PROGRAMMATIC_TEXT";
 }

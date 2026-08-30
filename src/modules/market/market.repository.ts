@@ -16,8 +16,8 @@ import type {
   EvaluateQuoteInput,
   EvaluationCode,
   EvaluationResult,
+  GroundedSaveQuoteInput,
   MarketStrategy,
-  SaveQuoteInput,
   SelectQuoteInput,
 } from "./market.types";
 
@@ -149,7 +149,7 @@ export class MarketRepository {
 
   saveQuote(
     negotiationId: string,
-    input: SaveQuoteInput,
+    input: GroundedSaveQuoteInput,
     actorId?: string,
   ) {
     return db.transaction((tx) => {
@@ -227,6 +227,10 @@ export class MarketRepository {
           negotiationId,
           carrierId: context.carrier.id,
           callId: input.callId ?? null,
+          groundedCallerItemId: input.grounding?.callerItemId ?? null,
+          groundedTranscript: input.grounding?.transcript ?? null,
+          groundedStartMs: input.grounding?.startMs ?? null,
+          groundedEndMs: input.grounding?.endMs ?? null,
           totalPriceCents: evaluation.totalPriceCents,
           currency: input.currency,
           pickupDate: input.pickupDate,
@@ -295,6 +299,7 @@ export class MarketRepository {
             currency: quote.currency,
             pickupDate: quote.pickupDate,
             validUntil: quote.validUntil,
+            grounding: input.grounding ?? null,
             ...evaluation.result,
           }),
           occurredAt,

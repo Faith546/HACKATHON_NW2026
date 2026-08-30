@@ -9,6 +9,7 @@ import type {
 } from "../voice/voice-core.port";
 import { parseVoiceToolArguments } from "../voice/voice-tools";
 import type { RealtimeSessionRepository } from "./realtime.repository";
+import { requireCallerMoneyEvidence } from "./caller-money-grounding";
 import {
   type CreateRealtimeSessionInput,
   type RealtimeAgentType,
@@ -268,6 +269,14 @@ export class RealtimeService {
       name === "attachCommitmentEvidence"
         ? deriveTranscriptEvidence(session, parsedArguments)
         : parsedArguments;
+    const quoteGrounding =
+      name === "evaluateOffer" || name === "recordQuote"
+        ? requireCallerMoneyEvidence(
+            session,
+            trustedArguments.totalPrice as number,
+            trustedArguments.currency as string,
+          )
+        : undefined;
     const transcriptEvidence =
       name === "recordVerbalAgreement" ||
       name === "createOperation" ||
@@ -295,6 +304,7 @@ export class RealtimeService {
           actorType: session.actorType,
           mandateId: session.mandateId,
           ...(transcriptEvidence ? { transcriptEvidence } : {}),
+          ...(quoteGrounding ? { quoteGrounding } : {}),
         },
         arguments: trustedArguments,
       });

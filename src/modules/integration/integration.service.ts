@@ -54,7 +54,7 @@ import {
 } from "../market/market.service";
 import type {
   EvaluateQuoteInput,
-  SaveQuoteInput,
+  GroundedSaveQuoteInput,
 } from "../market/market.types";
 import {
   operationsService as defaultOperationsService,
@@ -176,7 +176,7 @@ export class IntegrationService {
 
   recordQuote(
     negotiationId: string,
-    input: SaveQuoteInput,
+    input: GroundedSaveQuoteInput,
     actorId?: string,
   ) {
     return this.marketService.recordQuote(negotiationId, input, actorId);
@@ -305,8 +305,9 @@ export class IntegrationService {
         const quote = await this.recordQuote(
           requireNegotiationId(input.context),
           {
-            ...(args as Omit<SaveQuoteInput, "callId">),
+            ...(args as Omit<GroundedSaveQuoteInput, "callId" | "grounding">),
             callId: input.context.callId,
+            grounding: input.context.quoteGrounding,
           },
           actorId,
         );

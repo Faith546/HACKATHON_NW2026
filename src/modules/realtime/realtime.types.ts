@@ -32,6 +32,7 @@ export interface CreateRealtimeSessionInput {
 export interface TranscriptSegment {
   id: string;
   speaker: "AGENT" | "HUMAN";
+  source: "CALLER_AUDIO" | "AGENT_AUDIO" | "PROGRAMMATIC_TEXT";
   startMs: number;
   endMs: number;
   text: string;

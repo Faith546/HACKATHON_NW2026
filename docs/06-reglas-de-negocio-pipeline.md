@@ -52,7 +52,7 @@ Aquí es donde reside el corazón de la regla matemática para elegir al mejor c
 
 1. **Modificar `rankQuotes()` en `market.repository.ts`:**
    Añade un nuevo bloque condicional para tu estrategia, calculando el factor de decisión (e.g., *score de eficiencia = kilos / (precio + penalización por paradas)*).
-   
+
    ```typescript
    if (strategy === "TU_NUEVA_ESTRATEGIA") {
      const leftScore = calcular(left, weightKg, stops);

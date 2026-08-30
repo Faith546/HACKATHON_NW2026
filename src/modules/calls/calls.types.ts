@@ -73,6 +73,11 @@ export interface Call {
   negotiationId: string | null;
   actorType: CallActorType;
   twilioCallSid: string | null;
+  twilioStreamSid: string | null;
+  recordingSid: string | null;
+  recordingStatus: string | null;
+  recordingUrl: string | null;
+  recordingDurationSeconds: number | null;
   realtimeSessionId: string | null;
   direction: CallDirection;
   purpose: CallPurpose;
@@ -157,6 +162,15 @@ export function toCallResponse(call: Call) {
     negotiationId: call.negotiationId,
     actorType: call.actorType,
     twilioCallSid: call.twilioCallSid,
+    twilioStreamSid: call.twilioStreamSid,
+    recording: call.recordingStatus === null ? null : {
+      sid: call.recordingSid,
+      status: call.recordingStatus,
+      url: call.recordingUrl,
+      durationSeconds: call.recordingDurationSeconds,
+      correlationStatus: "UNRESOLVED",
+      reason: "RECORDING_START_OFFSET_UNKNOWN",
+    },
     direction: call.direction,
     purpose: call.purpose,
     status: call.status,

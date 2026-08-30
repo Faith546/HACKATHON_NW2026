@@ -12,6 +12,14 @@ export interface TwilioStatusWebhook {
   To?: string;
 }
 
+export interface TwilioRecordingStatusWebhook {
+  CallSid: string;
+  RecordingSid: string;
+  RecordingStatus: string;
+  RecordingUrl?: string;
+  RecordingDuration?: string;
+}
+
 export interface TwilioWebhookRequest {
   signature: string | undefined;
   requestUrl: string;

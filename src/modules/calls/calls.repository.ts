@@ -26,11 +26,20 @@ export interface CallRepository {
   insert(call: Call): Promise<void>;
   findById(callId: string): Promise<Call | null>;
   findByProviderCallId(providerCallId: string): Promise<Call | null>;
+  findByStreamSid(streamSid: string): Promise<Call | null>;
+  findByRecordingSid(recordingSid: string): Promise<Call | null>;
   findByOperationPurpose(
     operationId: string,
     purpose: CallPurpose,
   ): Promise<Call | null>;
   setProviderCallId(callId: string, providerCallId: string): Promise<Call>;
+  setStreamSid(callId: string, streamSid: string): Promise<Call>;
+  setRecording(callId: string, patch: {
+    recordingSid?: string | null;
+    recordingStatus?: string | null;
+    recordingUrl?: string | null;
+    recordingDurationSeconds?: number | null;
+  }): Promise<Call>;
   bindContext(
     callId: string,
     input: {
@@ -79,6 +88,20 @@ export class InMemoryCallRepository implements CallRepository {
     return null;
   }
 
+  async findByStreamSid(streamSid: string): Promise<Call | null> {
+    for (const call of this.callsById.values()) {
+      if (call.twilioStreamSid === streamSid) return cloneCall(call);
+    }
+    return null;
+  }
+
+  async findByRecordingSid(recordingSid: string): Promise<Call | null> {
+    for (const call of this.callsById.values()) {
+      if (call.recordingSid === recordingSid) return cloneCall(call);
+    }
+    return null;
+  }
+
   async findByOperationPurpose(
     operationId: string,
     purpose: CallPurpose,
@@ -96,6 +119,16 @@ export class InMemoryCallRepository implements CallRepository {
     providerCallId: string,
   ): Promise<Call> {
     return this.update(callId, { twilioCallSid: providerCallId });
+  }
+
+  async setStreamSid(callId: string, streamSid: string): Promise<Call> {
+    const owner = await this.findByStreamSid(streamSid);
+    if (owner && owner.id !== callId) throw new Error("StreamSid already exists");
+    return this.update(callId, { twilioStreamSid: streamSid });
+  }
+
+  async setRecording(callId: string, patch: Parameters<CallRepository["setRecording"]>[1]): Promise<Call> {
+    return this.update(callId, patch);
   }
 
   async bindContext(
@@ -197,6 +230,9 @@ function parseBrief(raw: string | null): CallBrief | null {
 }
 
 function toCall(row: CallRow): Call {
+  if (row.operationId === null) {
+    throw new Error(`Call ${row.id} has no operation context`);
+  }
   return {
     id: row.id,
     operationId: row.operationId,
@@ -204,6 +240,11 @@ function toCall(row: CallRow): Call {
     negotiationId: row.negotiationId,
     actorType: row.actorType as CallActorType,
     twilioCallSid: row.twilioCallSid,
+    twilioStreamSid: row.twilioStreamSid,
+    recordingSid: row.recordingSid,
+    recordingStatus: row.recordingStatus,
+    recordingUrl: row.recordingUrl,
+    recordingDurationSeconds: row.recordingDurationSeconds,
     realtimeSessionId: row.realtimeSessionId,
     direction: row.direction as Call["direction"],
     purpose: row.purpose as Call["purpose"],
@@ -229,6 +270,11 @@ export class DrizzleCallRepository implements CallRepository {
       negotiationId: call.negotiationId,
       actorType: call.actorType,
       twilioCallSid: call.twilioCallSid,
+      twilioStreamSid: call.twilioStreamSid,
+      recordingSid: call.recordingSid,
+      recordingStatus: call.recordingStatus,
+      recordingUrl: call.recordingUrl,
+      recordingDurationSeconds: call.recordingDurationSeconds,
       realtimeSessionId: call.realtimeSessionId,
       direction: call.direction,
       purpose: call.purpose,
@@ -261,6 +307,24 @@ export class DrizzleCallRepository implements CallRepository {
     return row ? toCall(row) : null;
   }
 
+  async findByStreamSid(streamSid: string): Promise<Call | null> {
+    const row = this.database
+      .select()
+      .from(callsTable)
+      .where(eq(callsTable.twilioStreamSid, streamSid))
+      .get();
+    return row ? toCall(row) : null;
+  }
+
+  async findByRecordingSid(recordingSid: string): Promise<Call | null> {
+    const row = this.database
+      .select()
+      .from(callsTable)
+      .where(eq(callsTable.recordingSid, recordingSid))
+      .get();
+    return row ? toCall(row) : null;
+  }
+
   async findByOperationPurpose(
     operationId: string,
     purpose: CallPurpose,
@@ -285,6 +349,14 @@ export class DrizzleCallRepository implements CallRepository {
     providerCallId: string,
   ): Promise<Call> {
     return this.update(callId, { twilioCallSid: providerCallId });
+  }
+
+  async setStreamSid(callId: string, streamSid: string): Promise<Call> {
+    return this.update(callId, { twilioStreamSid: streamSid });
+  }
+
+  async setRecording(callId: string, patch: Parameters<CallRepository["setRecording"]>[1]): Promise<Call> {
+    return this.update(callId, patch);
   }
 
   async bindContext(
