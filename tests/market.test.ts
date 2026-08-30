@@ -198,6 +198,47 @@ describe("Market Engine OpenAPI contract", () => {
     assert.equal(restartedCampaign.status, 202, await restartedCampaign.text());
   });
 
+  it("keeps negotiating after 9500 and records only the improved 8700 offer", async () => {
+    const context = await createMarketContext(baseUrl, [80, 70, 60]);
+    const negotiationId = context.negotiationIds[0];
+    const highResponse = await fetch(
+      `${baseUrl}/api/v1/negotiations/${negotiationId}/offers/evaluate`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(offer(9_500)),
+      },
+    );
+    const high = await highResponse.json();
+    assert.equal(highResponse.status, 200);
+    assert.equal(high.allowed, false);
+    assert.equal(high.code, "PRICE_EXCEEDS_MANDATE");
+    assert.equal(
+      db.select().from(negotiations).where(eq(negotiations.id, negotiationId)).get()?.status,
+      "NEGOTIATING",
+    );
+
+    const improvedResponse = await fetch(
+      `${baseUrl}/api/v1/negotiations/${negotiationId}/offers/evaluate`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(offer(8_700)),
+      },
+    );
+    const improved = await improvedResponse.json();
+    assert.equal(improvedResponse.status, 200);
+    assert.equal(improved.allowed, true);
+
+    const quote = await recordQuote(baseUrl, negotiationId, offer(8_700));
+    assert.equal(quote.totalPrice, 8_700);
+    assert.equal(quote.valid, true);
+    assert.equal(
+      db.select().from(quoteTable).where(eq(quoteTable.negotiationId, negotiationId)).all().length,
+      1,
+    );
+  });
+
   it("implements BALANCED_SCORE with a documented deterministic formula", async () => {
     const context = await createMarketContext(baseUrl, [0, 100, 50]);
     const quotes = await Promise.all([

@@ -73,6 +73,7 @@ describe("RealtimeService", () => {
 
     assert.equal(session.mandateId, "man_1");
     assert.equal(session.allowedTools.includes("recordQuote"), true);
+    assert.equal(session.allowedTools.includes("requestEscalation"), true);
     assert.equal(session.allowedTools.includes("createMandate"), false);
     await realtime.appendTranscriptSegment(session.id, {
       id: "turn_1",

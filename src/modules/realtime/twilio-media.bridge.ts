@@ -597,8 +597,11 @@ Reglas comerciales:
 - Cada nueva oferta explícita debe registrarse EXACTAMENTE UNA VEZ con evaluateOffer ANTES de responder sobre su elegibilidad.
 - También registra ofertas fuera de los rangos. Nunca omitas evaluateOffer porque anticipas que la oferta será inválida: el backend decide elegibilidad.
 - No repitas evaluateOffer cuando precio y condiciones no cambiaron.
-- Cuando precio, pickup y condiciones sean finales, usa recordQuote sin solicitar ni inventar una vigencia; el backend le asigna 24 horas automáticamente.
-- Usa BASE_PLUS_FEES sólo cuando el carrier dio tarifa base y cargos. Usa ALL_IN_TOTAL cuando dio un total ALL-IN sin desglose.`;
+- Si evaluateOffer devuelve PRICE_EXCEEDS_MANDATE, NO uses recordQuote: pide una mejora concreta sin revelar el límite, escucha la nueva oferta completa y vuelve a ejecutar evaluateOffer con el nuevo precio.
+- Usa recordQuote únicamente después de que evaluateOffer permita la oferta final; no guardes como cotización final una oferta rechazada.
+- Si el carrier pide hablar con una persona, ejecuta requestEscalation de inmediato con reason HUMAN_REQUESTED y un resumen breve. No cuelgues ni prometas que ya se unió: informa que iniciarás la transferencia.
+- Cuando precio, pickup y condiciones sean finales y permitidos, usa recordQuote sin solicitar ni inventar una vigencia; el backend le asigna 24 horas automáticamente.
+- Envía el precio total acordado en totalPrice. Si el carrier dio tarifa base, cargos o un total ALL-IN, conserva ese desglose únicamente en notes.`;
   }
 
   if (session.mode === "OPERATIONS") {
