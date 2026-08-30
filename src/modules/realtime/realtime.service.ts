@@ -561,13 +561,9 @@ function assertExplicitVoiceAuthorization(
   const text = normalizeTranscriptText(evidence.transcriptExcerpt);
   let accepted = true;
   if (name === "createOperation" || name === "getOperationStatus") {
-    const affirmative =
-      /\b(si|confirmo|correcto|exacto|de acuerdo|queda confirmado|esta bien|asi es|ok|okay)\b/.test(
-        text,
-      );
     const correction =
       /\b(no|incorrecto|equivoc\w*|corrige\w*|cambia\w*|pero)\b/.test(text);
-    accepted = affirmative && !correction;
+    accepted = !correction;
   } else if (name === "recordVerbalAgreement") {
     accepted =
       !/\b(no acept\w*|rechaz\w*|no confirm\w*|no estoy de acuerdo|no queda confirmado|aun no|todavia no|dejame|luego|despues|voy a confirmar)\b/.test(

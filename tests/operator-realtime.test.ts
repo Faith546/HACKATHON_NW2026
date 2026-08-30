@@ -9,7 +9,7 @@ import { ApiError } from "../src/shared/http/api-error";
 import { InMemoryJobQueue } from "../src/shared/queue/in-memory-job-queue";
 
 describe("Authorized operator Realtime flow", () => {
-  it("allows createOperation after any final human confirmation", async () => {
+  it("blocks a disputed container but does not loop on transcript timing", async () => {
     const calls = new CallsService({
       repository: new InMemoryCallRepository(),
       queue: new InMemoryJobQueue(),
@@ -98,7 +98,7 @@ describe("Authorized operator Realtime flow", () => {
       source: "CALLER_AUDIO",
       startMs: 400,
       endMs: 600,
-      text: "Sí, correcto.",
+      text: "El contenedor correcto es T, C, L, U, uno, uno, dos, dos, tres, tres, cuatro.",
       final: true,
       interrupted: false,
     });
@@ -269,7 +269,7 @@ describe("Authorized operator Realtime flow", () => {
       source: "CALLER_AUDIO",
       startMs: 100,
       endMs: 140,
-      text: "Sí, correcto.",
+      text: "El contenedor es T, C, L, U, uno, dos, tres, cuatro, cinco, seis, siete.",
       final: true,
       interrupted: false,
     });
