@@ -341,7 +341,7 @@ export class CampaignsRepository {
         targetStatus === "CALLING"
           ? ["PENDING"]
           : targetStatus === "NEGOTIATING"
-            ? ["PENDING", "CALLING"]
+            ? ["PENDING", "CALLING", "NO_ANSWER"]
             : ["PENDING", "CALLING", "NEGOTIATING"];
       if (negotiation.status === targetStatus) return negotiation;
       if (!allowedCurrentStatuses.includes(negotiation.status)) {

@@ -58,6 +58,7 @@ export class EscalationsService {
       return context.escalation;
     }
     this.activeJoinJobs.add(escalationId);
+    console.info(`[HUMAN_HANDOFF] queued escalationId=${escalationId}`);
     let gatewayResult: JoinHumanConferenceResult | null = null;
 
     this.queue.enqueue({
@@ -67,10 +68,18 @@ export class EscalationsService {
         gatewayResult ??=
           await this.conferenceGateway.joinHuman(context.gatewayInput);
         this.repository.markHumanJoined(escalationId, gatewayResult);
+        console.info(`[HUMAN_HANDOFF] joined escalationId=${escalationId}`);
         this.activeJoinJobs.delete(escalationId);
       },
       onExhausted: (error) => {
         this.repository.markHumanJoinFailed(escalationId, error);
+        const code =
+          error && typeof error === "object" && "code" in error
+            ? String(error.code)
+            : "UNKNOWN";
+        console.error(
+          `[HUMAN_HANDOFF] failed escalationId=${escalationId} code=${code}`,
+        );
         this.activeJoinJobs.delete(escalationId);
       },
     });

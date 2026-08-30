@@ -85,6 +85,20 @@ describe("Campaigns and negotiation lifecycle", () => {
       storedNegotiations[0].id,
     );
     await campaignsService.reportNoAnswer(storedNegotiations[0].id);
+    const callback = await campaignsService.markNegotiationInProgress(
+      storedNegotiations[0].id,
+    );
+    assert.equal(callback.status, "CALLING");
+    assert.equal(callback.completedNegotiations, 0);
+    assert.equal(
+      db
+        .select({ status: negotiations.status })
+        .from(negotiations)
+        .where(eq(negotiations.id, storedNegotiations[0].id))
+        .get()?.status,
+      "NEGOTIATING",
+    );
+    await campaignsService.reportNoAnswer(storedNegotiations[0].id);
     await campaignsService.reportNoAnswer(storedNegotiations[1].id);
     const ready = await campaignsService.reportNoAnswer(
       storedNegotiations[2].id,
