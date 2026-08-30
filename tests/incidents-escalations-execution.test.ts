@@ -31,6 +31,7 @@ import {
   type JoinHumanConferenceInput,
   type TwilioConferenceApi,
 } from "../src/modules/escalations/human-conference.gateway";
+import { IntegrationService } from "../src/modules/integration/integration.service";
 import { createExecutionService } from "../src/modules/execution/execution.service";
 import { createExecutionRouter } from "../src/modules/execution/execution.routes";
 import { errorHandler } from "../src/shared/http/error-handler";
@@ -242,6 +243,69 @@ describe("Incidents endpoints", () => {
 });
 
 describe("Escalations endpoints and Twilio conference gateway", () => {
+  it("auto-joins the configured human from an active quote call", async () => {
+    const { sqlite, database } = createBusinessFlowDatabase();
+    seedOperation(database, { operationId: "op_quote_handoff", status: "SOURCING" });
+    database.insert(carriers).values({
+      id: "car_quote_handoff",
+      name: "Carrier Quote Handoff",
+      dispatcherName: "Dispatcher Handoff",
+      phone: "+525555555550",
+      score: 80,
+      active: true,
+      createdAt: t0,
+    }).run();
+    seedCall(database, {
+      callId: "call_quote_handoff",
+      operationId: "op_quote_handoff",
+      carrierId: "car_quote_handoff",
+      status: "IN_PROGRESS",
+      purpose: "QUOTE",
+      twilioCallSid: "CA_QUOTE_HANDOFF",
+    });
+    const gateway = new CapturingConferenceGateway();
+    const queue = new InMemoryJobQueue({ concurrency: 1, maxRetries: 0 });
+    const escalationsService = createEscalationsService({
+      database,
+      queue,
+      conferenceGateway: gateway,
+      createEscalationId: () => "esc_quote_handoff",
+    });
+    const integration = new IntegrationService({
+      escalationsService,
+      humanEscalationPhone: "+525555555556",
+    });
+
+    try {
+      const queued = await integration.executeVoiceTool({
+        name: "requestEscalation",
+        context: {
+          callId: "call_quote_handoff",
+          operationId: "op_quote_handoff",
+          carrierId: "car_quote_handoff",
+          negotiationId: "neg_quote_handoff",
+          actorType: "CARRIER",
+          mandateId: null,
+        },
+        arguments: {
+          reason: "HUMAN_REQUESTED",
+          contextSummary: "El carrier pidió hablar con una persona.",
+        },
+      }) as { status: string };
+      assert.equal(queued.status, "DIALING_HUMAN");
+      await queue.onIdle();
+      assert.equal(
+        escalationsService.getEscalation("esc_quote_handoff")?.status,
+        "HUMAN_JOINED",
+      );
+      assert.equal(gateway.inputs.length, 1);
+      assert.equal(gateway.inputs[0]?.providerCallId, "CA_QUOTE_HANDOFF");
+      assert.equal(gateway.inputs[0]?.humanPhone, "+525555555556");
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("validates the active context and persists the queued and joined conference states", async () => {
     const { sqlite, database } = createBusinessFlowDatabase();
     seedOperation(database, { operationId: "op_esc", status: "IN_TRANSIT" });

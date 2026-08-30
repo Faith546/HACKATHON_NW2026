@@ -53,6 +53,10 @@ integrationFacade = createIntegrationService({
   commitmentsService,
   callsService: voiceRuntime.callsService,
   inboundContextResolver: voiceCore,
+  humanEscalationPhone:
+    process.env.HUMAN_ESCALATION_PHONE?.trim() ||
+    authorizedOperatorPhones[0] ||
+    null,
 });
 const app = createApp({
   core: { commitmentsService },

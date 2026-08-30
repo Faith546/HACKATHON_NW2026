@@ -31,6 +31,7 @@ const toolsByMode: Record<RealtimeMode, VoiceToolName[]> = {
     "evaluateOffer",
     "recordQuote",
     "reportNoAnswer",
+    "requestEscalation",
     "saveCallBrief",
   ],
   COMMIT: [
