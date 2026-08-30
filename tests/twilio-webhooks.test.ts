@@ -40,6 +40,7 @@ describe("Twilio webhooks", () => {
         operationId: "op_1",
         carrierId: "car_1",
         negotiationId: "neg_1",
+        actorType: "CARRIER",
         purpose: "INCIDENT",
       }),
       getActiveMandate: async () => null,

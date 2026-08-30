@@ -9,7 +9,7 @@
 - CallSid + StreamSid se asocian de forma única y se rechazan mismatches/cross-call.
 - Recording inicia después de CallSid/StreamSid válido, guarda Sid/status/URL/duración (no blob), y sus callbacks son idempotentes.
 - Timing conserva eventos raw separados para `twilio_stream`, `openai_input`, `recording` y `local_observation`.
-- Migración Drizzle Voice reconciliada como `0003`, posterior a Business Rules `0002`, con pruebas fresh y upgrade.
+- Migración Drizzle Voice reconciliada como `0004`, posterior a Business Rules `0002` y al runtime autónomo `0003`, con pruebas fresh y upgrade.
 
 ## NEEDS_DEPLOYMENT_CONFIG
 
@@ -28,7 +28,7 @@
 
 - `UNIQUE(negotiation_id)` y el estado terminal `QUOTED` siguen impidiendo revisiones 8,500 → 10,000.
 - Backend debe definir contrato/schema de quote candidate/revision y dedup persistente. Voice no creó Round2, ranking, top2 ni winner.
-- No hay bloqueo de migraciones con Business Rules: `0002` conserva ese frente y Voice continúa en `0003`.
+- No hay bloqueo de migraciones: `0002` conserva Business Rules, `0003` el runtime autónomo de main y Voice continúa en `0004`.
 
 ## BLOCKED_BY_AGENTS
 

@@ -36,11 +36,24 @@ export type VoiceToolExecutor = (input: {
   arguments: Record<string, unknown>;
 }) => Promise<unknown>;
 
+export interface DrizzleVoiceCoreAdapterOptions {
+  authorizedOperatorPhones?: string[];
+}
+
 export class DrizzleVoiceCoreAdapter implements VoiceCorePort {
+  private readonly authorizedOperatorPhones: Set<string>;
+
   constructor(
     private readonly database: VoiceDatabase,
     private readonly toolExecutor?: VoiceToolExecutor,
-  ) {}
+    options: DrizzleVoiceCoreAdapterOptions = {},
+  ) {
+    this.authorizedOperatorPhones = new Set(
+      (options.authorizedOperatorPhones ?? [])
+        .map((phone) => phone.trim())
+        .filter(Boolean),
+    );
+  }
 
   async resolveOutboundCallContext(
     input: EnqueueOutboundCallInput,
@@ -204,6 +217,15 @@ export class DrizzleVoiceCoreAdapter implements VoiceCorePort {
     fromNumber: string;
     toNumber: string;
   }): Promise<InboundCallResolution> {
+    if (this.authorizedOperatorPhones.has(input.fromNumber.trim())) {
+      return {
+        operationId: null,
+        carrierId: null,
+        negotiationId: null,
+        actorType: "INTERNAL_OPERATOR",
+        purpose: "OPERATIONS",
+      };
+    }
     const carrier = this.database
       .select({ id: carriers.id })
       .from(carriers)
@@ -308,6 +330,7 @@ export class DrizzleVoiceCoreAdapter implements VoiceCorePort {
       operationId,
       carrierId: carrier.id,
       negotiationId,
+      actorType: "CARRIER",
       purpose:
         operationStatus === "SOURCING"
           ? selected

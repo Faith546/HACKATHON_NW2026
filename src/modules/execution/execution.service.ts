@@ -16,16 +16,28 @@ export class ExecutionService {
     operationId: string,
     input: ConfirmExecutionEventInput,
     actorId?: string,
+    actorType: "DRIVER" | "INTERNAL_OPERATOR" = "DRIVER",
   ): OperationExecutionResponse {
-    return this.repository.confirmPickup(operationId, input, actorId);
+    return this.repository.confirmPickup(
+      operationId,
+      input,
+      actorId,
+      actorType,
+    );
   }
 
   confirmDelivery(
     operationId: string,
     input: ConfirmExecutionEventInput,
     actorId?: string,
+    actorType: "DRIVER" | "INTERNAL_OPERATOR" = "DRIVER",
   ): OperationExecutionResponse {
-    return this.repository.confirmDelivery(operationId, input, actorId);
+    return this.repository.confirmDelivery(
+      operationId,
+      input,
+      actorId,
+      actorType,
+    );
   }
 }
 

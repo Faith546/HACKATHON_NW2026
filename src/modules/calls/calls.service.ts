@@ -8,6 +8,7 @@ import {
   type Call,
   type CallBrief,
   type CallBriefInput,
+  type CallActorType,
   type CallLifecycleObserver,
   type CallPurpose,
   type CallScheduler,
@@ -100,6 +101,7 @@ export class CallsService implements CallScheduler {
       operationId,
       carrierId,
       negotiationId: normalizedInput.negotiationId ?? null,
+      actorType: "CARRIER",
       twilioCallSid: null,
       twilioStreamSid: null,
       recordingSid: null,
@@ -324,6 +326,16 @@ export class CallsService implements CallScheduler {
     return this.dependencies.repository.setRecording(callId, patch);
   }
 
+  async findByOperationPurpose(
+    operationId: string,
+    purpose: CallPurpose,
+  ): Promise<Call | null> {
+    return this.dependencies.repository.findByOperationPurpose(
+      requiredIdentifier(operationId, "operationId"),
+      purpose,
+    );
+  }
+
   async ensureProviderCallId(
     callId: string,
     providerCallId: string,
@@ -404,9 +416,12 @@ export class CallsService implements CallScheduler {
 
     const call: Call = {
       id: this.createId(),
-      operationId: requiredIdentifier(input.operationId, "operationId"),
+      operationId: input.operationId
+        ? requiredIdentifier(input.operationId, "operationId")
+        : null,
       carrierId: input.carrierId?.trim() || null,
       negotiationId: input.negotiationId?.trim() || null,
+      actorType: input.actorType,
       twilioCallSid: providerCallId,
       twilioStreamSid: null,
       recordingSid: null,
@@ -435,20 +450,57 @@ export class CallsService implements CallScheduler {
       if (concurrent) return concurrent;
       throw error;
     }
-    await this.dependencies.auditWriter?.record({
-      operationId: call.operationId,
-      eventType: "CALL_RECEIVED",
-      actorType: "SYSTEM",
-      callId: call.id,
-      entityType: "CALL",
-      entityId: call.id,
-      payload: {
-        providerCallId,
-        carrierId: call.carrierId,
-        fromNumber: call.fromNumber,
-      },
-    });
+    if (call.operationId) {
+      await this.recordInboundCallReceived(call);
+    }
     return call;
+  }
+
+  async bindOperationContext(
+    callId: string,
+    input: {
+      operationId: string;
+      purpose?: CallPurpose;
+      actorType?: CallActorType;
+    },
+  ): Promise<Call> {
+    const current = await this.getById(callId);
+    const operationId = requiredIdentifier(input.operationId, "operationId");
+    if (current.operationId && current.operationId !== operationId) {
+      throw new ApiError(
+        409,
+        "CALL_OPERATION_CONTEXT_CONFLICT",
+        "La llamada ya está vinculada con otra operación.",
+        { callId, operationId: current.operationId },
+      );
+    }
+    const updated = await this.dependencies.repository.bindContext(callId, {
+      operationId,
+      ...(input.purpose ? { purpose: input.purpose } : {}),
+      ...(input.actorType ? { actorType: input.actorType } : {}),
+    });
+    if (!current.operationId) {
+      await this.recordInboundCallReceived(updated);
+      await this.dependencies.auditWriter?.record({
+        operationId,
+        eventType: "CALL_CONTEXT_LINKED",
+        actorType:
+          updated.actorType === "INTERNAL_OPERATOR"
+            ? "INTERNAL_OPERATOR"
+            : updated.actorType === "DRIVER"
+              ? "DRIVER"
+              : "CARRIER",
+        actorId:
+          updated.actorType === "INTERNAL_OPERATOR"
+            ? updated.fromNumber
+            : undefined,
+        callId: updated.id,
+        entityType: "CALL",
+        entityId: updated.id,
+        payload: { purpose: updated.purpose },
+      });
+    }
+    return updated;
   }
 
   async linkRealtimeSession(
@@ -469,7 +521,7 @@ export class CallsService implements CallScheduler {
       callId,
       transcript.trim(),
     );
-    if (options.audit !== false) {
+    if (options.audit !== false && call.operationId) {
       await this.dependencies.auditWriter?.record({
         operationId: call.operationId,
         eventType: "TRANSCRIPT_SAVED",
@@ -530,7 +582,7 @@ export class CallsService implements CallScheduler {
     if (!result) {
       throw new ApiError(404, "RESOURCE_NOT_FOUND", "La llamada no existe.");
     }
-    if (result.changed) {
+    if (result.changed && result.call.operationId) {
       await this.dependencies.auditWriter?.record({
         operationId: result.call.operationId,
         eventType: statusAuditEvent(nextStatus),
@@ -565,16 +617,39 @@ export class CallsService implements CallScheduler {
       generatedAt: this.now().toISOString(),
     };
     await this.dependencies.repository.saveBrief(call.id, brief);
+    if (call.operationId) {
+      await this.dependencies.auditWriter?.record({
+        operationId: call.operationId,
+        eventType: "CALL_BRIEF_SAVED",
+        actorType:
+          call.actorType === "INTERNAL_OPERATOR"
+            ? "OPERATIONS_AGENT"
+            : "LOGISTICS_AGENT",
+        callId: call.id,
+        entityType: "CALL",
+        entityId: call.id,
+        payload: { outcome: brief.outcome },
+      });
+    }
+    return brief;
+  }
+
+  private async recordInboundCallReceived(call: Call): Promise<void> {
+    if (!call.operationId) return;
     await this.dependencies.auditWriter?.record({
       operationId: call.operationId,
-      eventType: "CALL_BRIEF_SAVED",
-      actorType: "LOGISTICS_AGENT",
+      eventType: "CALL_RECEIVED",
+      actorType: "SYSTEM",
       callId: call.id,
       entityType: "CALL",
       entityId: call.id,
-      payload: { outcome: brief.outcome },
+      payload: {
+        providerCallId: call.twilioCallSid,
+        actorType: call.actorType,
+        carrierId: call.carrierId,
+        fromNumber: call.fromNumber,
+      },
     });
-    return brief;
   }
 }
 

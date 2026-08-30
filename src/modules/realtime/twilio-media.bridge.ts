@@ -162,7 +162,7 @@ export class TwilioMediaBridge {
     });
     const sessionContext = await this.realtimeService.create({
       callId,
-      actorType: "CARRIER",
+      actorType: call.actorType,
       carrierId: call.carrierId,
       operationId: call.operationId,
       negotiationId: call.negotiationId,
@@ -180,12 +180,37 @@ export class TwilioMediaBridge {
         );
       }
     };
+    let activeAgentContext = sessionContext;
+    let openAiSession: OpenAIRealtimeSession;
+    const refreshAgentContext = async (toolName: VoiceToolName) => {
+      if (toolName !== "getOperationStatus") return;
+      const refreshed = await this.realtimeService.getActiveByCallId(callId);
+      if (!refreshed) return;
+      if (
+        refreshed.mode === activeAgentContext.mode &&
+        refreshed.operationId === activeAgentContext.operationId &&
+        stableToolSet(refreshed.allowedTools) ===
+          stableToolSet(activeAgentContext.allowedTools)
+      ) {
+        return;
+      }
+      activeAgentContext = refreshed;
+      await openAiSession.updateAgent(
+        createRealtimeAgent(
+          this.realtimeService,
+          activeAgentContext,
+          waitForTranscript,
+          refreshAgentContext,
+        ),
+      );
+    };
     const agent = createRealtimeAgent(
       this.realtimeService,
-      sessionContext,
+      activeAgentContext,
       waitForTranscript,
+      refreshAgentContext,
     );
-    const openAiSession = new OpenAIRealtimeSession(agent, {
+    openAiSession = new OpenAIRealtimeSession(agent, {
       transport,
       model: this.config.model ?? "gpt-realtime",
       config: {
@@ -468,6 +493,7 @@ function createRealtimeAgent(
   service: RealtimeService,
   session: RealtimeSession,
   beforeToolExecution: () => Promise<void>,
+  afterToolExecution: (name: VoiceToolName) => Promise<void>,
 ): RealtimeAgent {
   const tools = session.allowedTools.map((name) =>
     tool({
@@ -476,11 +502,13 @@ function createRealtimeAgent(
       parameters: voiceToolParameterSchemas[name] as z.ZodType<Record<string, unknown>>,
       execute: async (argumentsValue) => {
         await beforeToolExecution();
-        return service.executeTool(
+        const result = await service.executeTool(
           session.id,
           name,
           argumentsValue as Record<string, unknown>,
         );
+        await afterToolExecution(name);
+        return result;
       },
     }),
   );
@@ -496,7 +524,7 @@ function instructionsForSession(session: RealtimeSession): string {
   let instructions = `Eres el agente telefónico ${session.agent} que representa al área de logística para contratar transporte terrestre con transportistas y despachadores.
 
 Operación actual:
-- ID: ${session.operationId}
+- ID: ${session.operationId ?? "pendiente de crear o resolver"}
 Modo actual: ${session.mode}
 
 Idiomas:
@@ -529,7 +557,41 @@ Reglas comerciales:
 - Usa BASE_PLUS_FEES sólo cuando el carrier dio tarifa base y cargos. Usa ALL_IN_TOTAL cuando dio un total ALL-IN sin desglose.`;
   }
 
+  if (session.mode === "OPERATIONS") {
+    instructions += `
+- La identidad telefónica ya fue validada como operador interno autorizado.
+- Identifícate claramente como agente automatizado.
+- Para crear una operación, recopila y recapitula todos los hechos. Ejecuta createOperation una sola vez sólo después de una confirmación verbal inequívoca.
+- createOperation inicia automáticamente la campaña con los tres carriers activos; no llames startCampaign después de un createOperation exitoso.
+- Para consultar o cerrar una operación existente, exige primero operationId o containerNumber y usa getOperationStatus para vincular esta llamada a esa operación exacta.
+- En este modo no puedes cerrar una operación. Si getOperationStatus resuelve una operación IN_TRANSIT, la sesión cambia de forma controlada al modo DELIVERY.`;
+  }
+
+  if (session.mode === "DELIVERY") {
+    instructions += `
+- La llamada ya fue vinculada por el backend a una operación IN_TRANSIT exacta.
+- Una intención administrativa de cerrar, una ETA o frases como "debería haber llegado" no prueban entrega.
+- Solicita fecha, hora, identidad del confirmante y condición de la carga; repite todos esos hechos.
+- Ejecuta confirmDelivery sólo después de una confirmación inequívoca de entrega física ocurrida.`;
+  }
+
+  if (session.mode === "COMMIT") {
+    instructions += `
+- No ejecutes recordVerbalAgreement ante lenguaje ambiguo como "suena bien", "déjame confirmarlo" o una intención futura.
+- Recapitula contenedor, ruta, pickup, precio y moneda, y exige un sí o aceptación inequívoca antes de registrar el acuerdo.`;
+  }
+
+  if (session.mode === "EXECUTION") {
+    instructions += `
+- Después de reportIncident, ejecuta evaluateIncidentChange con el incidentId devuelto antes de afirmar si el cambio está permitido.
+- Si la evaluación no lo permite, no modifiques términos y solicita escalación con el mismo incidentId.`;
+  }
+
   return instructions;
+}
+
+function stableToolSet(tools: VoiceToolName[]): string {
+  return [...tools].sort().join(",");
 }
 
 function transcriptText(item: RealtimeItem): string | null {

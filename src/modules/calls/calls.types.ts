@@ -1,6 +1,14 @@
 export const callDirections = ["INBOUND", "OUTBOUND"] as const;
 export type CallDirection = (typeof callDirections)[number];
 
+export const callActorTypes = [
+  "INTERNAL_OPERATOR",
+  "CARRIER",
+  "DISPATCHER",
+  "DRIVER",
+] as const;
+export type CallActorType = (typeof callActorTypes)[number];
+
 export const callPurposes = [
   "OPERATIONS",
   "QUOTE",
@@ -60,9 +68,10 @@ export interface CallBrief extends CallBriefInput {
 
 export interface Call {
   id: string;
-  operationId: string;
+  operationId: string | null;
   carrierId: string | null;
   negotiationId: string | null;
+  actorType: CallActorType;
   twilioCallSid: string | null;
   twilioStreamSid: string | null;
   recordingSid: string | null;
@@ -90,9 +99,10 @@ export interface EnqueueOutboundCallInput {
 }
 
 export interface CreateInboundCallInput {
-  operationId: string;
+  operationId: string | null;
   carrierId?: string | null;
   negotiationId?: string | null;
+  actorType: CallActorType;
   providerCallId: string;
   fromNumber: string;
   toNumber: string;
@@ -150,6 +160,7 @@ export function toCallResponse(call: Call) {
     operationId: call.operationId,
     carrierId: call.carrierId,
     negotiationId: call.negotiationId,
+    actorType: call.actorType,
     twilioCallSid: call.twilioCallSid,
     twilioStreamSid: call.twilioStreamSid,
     recording: call.recordingStatus === null ? null : {

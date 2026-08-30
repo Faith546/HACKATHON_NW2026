@@ -1149,14 +1149,17 @@ components:
 
     Call:
       type: object
-      required: [id, operationId, direction, status, purpose, createdAt]
+      required: [id, operationId, actorType, direction, status, purpose, createdAt]
       properties:
         id:
           type: string
           example: call_01JABC123
         operationId:
-          type: string
+          type: [string, "null"]
           example: op_01JABC123
+        actorType:
+          type: string
+          enum: [INTERNAL_OPERATOR, CARRIER, DISPATCHER, DRIVER]
         carrierId:
           type: [string, "null"]
           example: car_atlas
@@ -1262,7 +1265,7 @@ components:
           type: string
         actorType:
           type: string
-          enum: [CARRIER, DISPATCHER, DRIVER]
+          enum: [INTERNAL_OPERATOR, CARRIER, DISPATCHER, DRIVER]
         carrierId:
           type: [string, "null"]
         operationId:
@@ -1271,22 +1274,28 @@ components:
           type: [string, "null"]
         mode:
           type: string
-          enum: [QUOTE, COMMIT, EXECUTION, INCIDENT, DELIVERY]
+          enum: [OPERATIONS, QUOTE, COMMIT, EXECUTION, INCIDENT, DELIVERY]
 
     RealtimeSession:
       type: object
-      required: [id, callId, agent, mode, allowedTools, status]
+      required: [id, callId, operationId, actorType, agent, mode, allowedTools, status]
       properties:
         id:
           type: string
           example: rts_01JABC123
         callId:
           type: string
+        operationId:
+          type: [string, "null"]
+        actorType:
+          type: string
+          enum: [INTERNAL_OPERATOR, CARRIER, DISPATCHER, DRIVER]
         agent:
           type: string
-          enum: [LOGISTICS_AGENT]
+          enum: [OPERATIONS_AGENT, LOGISTICS_AGENT]
         mode:
           type: string
+          enum: [OPERATIONS, QUOTE, COMMIT, EXECUTION, INCIDENT, DELIVERY]
         mandateId:
           type: [string, "null"]
           example: man_01JABC123

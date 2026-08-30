@@ -25,6 +25,12 @@ import type { VoiceToolName } from "./voice-core.port";
 const identifier = z.string().trim().min(1);
 const nonEmptyText = z.string().trim().min(1);
 const emptyArguments = z.object({}).strict();
+const operationReferenceArguments = z
+  .object({
+    operationId: identifier.optional(),
+    containerNumber: identifier.optional(),
+  })
+  .strict();
 const commitmentEvidenceArguments = z
   .object({
     startMs: z.number().int().nonnegative().optional(),
@@ -56,7 +62,7 @@ const commitmentEvidenceArguments = z
 export const voiceToolSchemas = {
   createOperation: CreateOperationSchema.strict(),
   createMandate: CreateMandateInputSchema.strict(),
-  getOperationStatus: emptyArguments,
+  getOperationStatus: operationReferenceArguments,
   listCarriers: emptyArguments,
   startCampaign: CreateCampaignSchema.strict(),
   getQuotes: emptyArguments,
@@ -122,7 +128,7 @@ export const voiceToolParameterSchemas = {
 export const voiceToolDescriptions: Record<VoiceToolName, string> = {
   createOperation: "Crea la operación y su mandato inicial con hechos confirmados por el operador.",
   createMandate: "Crea una nueva versión inmutable del mandato de la operación.",
-  getOperationStatus: "Consulta el resumen operativo y sus entidades activas.",
+  getOperationStatus: "Consulta el resumen operativo. En una llamada de operador sin contexto, resuelve de forma inequívoca por operationId o containerNumber.",
   listCarriers: "Lista los carriers disponibles para una campaña.",
   startCampaign: "Inicia una campaña con al menos tres carriers elegidos explícitamente.",
   getQuotes: "Lista las cotizaciones registradas para la operación.",

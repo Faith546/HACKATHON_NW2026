@@ -2,7 +2,13 @@ import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { calls as callsTable } from "../../db/schema";
 import type * as databaseSchema from "../../db/schema";
-import type { Call, CallBrief, CallStatus } from "./calls.types";
+import type {
+  Call,
+  CallActorType,
+  CallBrief,
+  CallPurpose,
+  CallStatus,
+} from "./calls.types";
 
 export interface CallStatusTransition {
   expectedStatus: CallStatus;
@@ -22,6 +28,10 @@ export interface CallRepository {
   findByProviderCallId(providerCallId: string): Promise<Call | null>;
   findByStreamSid(streamSid: string): Promise<Call | null>;
   findByRecordingSid(recordingSid: string): Promise<Call | null>;
+  findByOperationPurpose(
+    operationId: string,
+    purpose: CallPurpose,
+  ): Promise<Call | null>;
   setProviderCallId(callId: string, providerCallId: string): Promise<Call>;
   setStreamSid(callId: string, streamSid: string): Promise<Call>;
   setRecording(callId: string, patch: {
@@ -30,6 +40,14 @@ export interface CallRepository {
     recordingUrl?: string | null;
     recordingDurationSeconds?: number | null;
   }): Promise<Call>;
+  bindContext(
+    callId: string,
+    input: {
+      operationId: string;
+      purpose?: CallPurpose;
+      actorType?: CallActorType;
+    },
+  ): Promise<Call>;
   setRealtimeSessionId(callId: string, sessionId: string | null): Promise<Call>;
   saveTranscript(callId: string, transcript: string): Promise<Call>;
   setStatus(
@@ -84,6 +102,18 @@ export class InMemoryCallRepository implements CallRepository {
     return null;
   }
 
+  async findByOperationPurpose(
+    operationId: string,
+    purpose: CallPurpose,
+  ): Promise<Call | null> {
+    for (const call of this.callsById.values()) {
+      if (call.operationId === operationId && call.purpose === purpose) {
+        return cloneCall(call);
+      }
+    }
+    return null;
+  }
+
   async setProviderCallId(
     callId: string,
     providerCallId: string,
@@ -99,6 +129,17 @@ export class InMemoryCallRepository implements CallRepository {
 
   async setRecording(callId: string, patch: Parameters<CallRepository["setRecording"]>[1]): Promise<Call> {
     return this.update(callId, patch);
+  }
+
+  async bindContext(
+    callId: string,
+    input: {
+      operationId: string;
+      purpose?: CallPurpose;
+      actorType?: CallActorType;
+    },
+  ): Promise<Call> {
+    return this.update(callId, input);
   }
 
   async setRealtimeSessionId(
@@ -197,6 +238,7 @@ function toCall(row: CallRow): Call {
     operationId: row.operationId,
     carrierId: row.carrierId,
     negotiationId: row.negotiationId,
+    actorType: row.actorType as CallActorType,
     twilioCallSid: row.twilioCallSid,
     twilioStreamSid: row.twilioStreamSid,
     recordingSid: row.recordingSid,
@@ -226,6 +268,7 @@ export class DrizzleCallRepository implements CallRepository {
       operationId: call.operationId,
       carrierId: call.carrierId,
       negotiationId: call.negotiationId,
+      actorType: call.actorType,
       twilioCallSid: call.twilioCallSid,
       twilioStreamSid: call.twilioStreamSid,
       recordingSid: call.recordingSid,
@@ -282,6 +325,25 @@ export class DrizzleCallRepository implements CallRepository {
     return row ? toCall(row) : null;
   }
 
+  async findByOperationPurpose(
+    operationId: string,
+    purpose: CallPurpose,
+  ): Promise<Call | null> {
+    const row = this.database
+      .select()
+      .from(callsTable)
+      .where(
+        and(
+          eq(callsTable.operationId, operationId),
+          eq(callsTable.purpose, purpose),
+        ),
+      )
+      .orderBy(callsTable.createdAt)
+      .limit(1)
+      .get();
+    return row ? toCall(row) : null;
+  }
+
   async setProviderCallId(
     callId: string,
     providerCallId: string,
@@ -295,6 +357,17 @@ export class DrizzleCallRepository implements CallRepository {
 
   async setRecording(callId: string, patch: Parameters<CallRepository["setRecording"]>[1]): Promise<Call> {
     return this.update(callId, patch);
+  }
+
+  async bindContext(
+    callId: string,
+    input: {
+      operationId: string;
+      purpose?: CallPurpose;
+      actorType?: CallActorType;
+    },
+  ): Promise<Call> {
+    return this.update(callId, input);
   }
 
   async setRealtimeSessionId(

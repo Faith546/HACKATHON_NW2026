@@ -6,7 +6,7 @@ No contiene secretos. Confirmar cada punto en Railway antes de una llamada real.
 - [ ] Root Directory apunta a la raíz de `HACKATHON_NW2026` (donde vive `package.json`).
 - [ ] Start Command: `npm run db:migrate && npm start`. Railway no monta volúmenes durante Pre-deploy; la migración SQLite debe ejecutarse al iniciar el contenedor que tiene el volumen.
 - [ ] Pre-deploy Command vacío para SQLite en volumen.
-- [ ] Confirmar que el deployment contiene la secuencia reconciliada `0002` Business Rules → `0003` Voice.
+- [ ] Confirmar que el deployment contiene `0002` Business Rules → `0003` runtime autónomo → `0004` Voice.
 - [ ] `HOST=0.0.0.0`; el código aún usa `127.0.0.1` como default local.
 - [ ] `PORT` lo inyecta Railway; el default local es `3000`.
 - [ ] Existe volumen persistente para SQLite y `SQLITE_PATH` apunta dentro de ese volumen.
@@ -14,6 +14,7 @@ No contiene secretos. Confirmar cada punto en Railway antes de una llamada real.
 - [ ] `PUBLIC_BASE_URL=https://<host-http-publico>` sin path adicional.
 - [ ] `PUBLIC_WSS_URL=wss://<host-wss-publico>` sin path adicional.
 - [ ] Están presentes `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` y `TWILIO_PHONE_NUMBER`.
+- [ ] `AUTHORIZED_OPERATOR_PHONES` contiene únicamente teléfonos E.164 autorizados, separados por coma.
 - [ ] Está presente `OPENAI_API_KEY`; revisar también `REALTIME_MODEL` y `REALTIME_VOICE` si se sobrescriben.
 - [ ] Health público responde `200`: `GET https://<host>/api/v1/health`.
 - [ ] Webhook público inbound: `POST https://<host>/api/v1/webhooks/twilio/voice`.

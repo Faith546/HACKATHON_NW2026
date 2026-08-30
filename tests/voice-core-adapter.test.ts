@@ -101,6 +101,7 @@ describe("DrizzleVoiceCoreAdapter", () => {
           operationId: "op_1",
           carrierId: "car_1",
           negotiationId: "neg_1",
+          actorType: "CARRIER",
           purpose: "QUOTE",
         },
       );
@@ -128,7 +129,34 @@ describe("DrizzleVoiceCoreAdapter", () => {
           operationId: "op_2",
           carrierId: "car_1",
           negotiationId: null,
+          actorType: "CARRIER",
           purpose: "EXECUTION",
+        },
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("authenticates configured operator phones without selecting an operation", async () => {
+    const { sqlite } = fixture();
+    try {
+      const adapter = new DrizzleVoiceCoreAdapter(
+        drizzle(sqlite, { schema }),
+        undefined,
+        { authorizedOperatorPhones: ["+525500009999"] },
+      );
+      assert.deepEqual(
+        await adapter.resolveInboundCallContext({
+          fromNumber: "+525500009999",
+          toNumber: "+525500000002",
+        }),
+        {
+          operationId: null,
+          carrierId: null,
+          negotiationId: null,
+          actorType: "INTERNAL_OPERATOR",
+          purpose: "OPERATIONS",
         },
       );
     } finally {
@@ -155,6 +183,7 @@ describe("DrizzleVoiceCoreAdapter", () => {
             operationId: "op_1",
             carrierId: null,
             negotiationId: null,
+            actorType: "CARRIER",
             mandateId: null,
           },
           arguments: {},

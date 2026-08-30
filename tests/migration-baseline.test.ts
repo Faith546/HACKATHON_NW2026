@@ -95,11 +95,11 @@ describe("SQLite migration baseline", () => {
     sqlite.close();
   });
 
-  it("upgrades a Business Rules database to Voice without losing calls", () => {
+  it("upgrades the current main database to Voice without losing calls", () => {
     const sqlite = new Database(":memory:");
     const migrations = readMigrationFiles({ migrationsFolder });
-    assert.equal(migrations.length, 4);
-    for (const migration of migrations.slice(0, 3)) {
+    assert.equal(migrations.length, 5);
+    for (const migration of migrations.slice(0, 4)) {
       for (const statement of migration.sql) {
         if (statement.trim()) sqlite.exec(statement);
       }
@@ -133,7 +133,7 @@ describe("SQLite migration baseline", () => {
       "2026-08-29T12:01:00.000Z",
     );
 
-    for (const statement of migrations[3]!.sql) {
+    for (const statement of migrations[4]!.sql) {
       if (statement.trim()) sqlite.exec(statement);
     }
 

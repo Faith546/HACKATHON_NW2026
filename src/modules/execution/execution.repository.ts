@@ -40,6 +40,7 @@ export class ExecutionRepository {
     operationId: string,
     input: ConfirmExecutionEventInput,
     actorId?: string,
+    actorType: "DRIVER" | "INTERNAL_OPERATOR" = "DRIVER",
   ): OperationExecutionResponse {
     return this.database.transaction((tx) => {
       const operation = tx
@@ -104,7 +105,7 @@ export class ExecutionRepository {
           id: this.createAuditId(),
           operationId,
           eventType: "PICKUP_CONFIRMED",
-          actorType: "DRIVER",
+          actorType,
           actorId: actorId ?? input.confirmedBy,
           callId: call.id,
           entityType: "COMMITMENT",
@@ -131,6 +132,7 @@ export class ExecutionRepository {
     operationId: string,
     input: ConfirmExecutionEventInput,
     actorId?: string,
+    actorType: "DRIVER" | "INTERNAL_OPERATOR" = "DRIVER",
   ): OperationExecutionResponse {
     return this.database.transaction((tx) => {
       const operation = tx
@@ -195,7 +197,7 @@ export class ExecutionRepository {
           id: this.createAuditId(),
           operationId,
           eventType: "DELIVERY_CONFIRMED",
-          actorType: "DRIVER",
+          actorType,
           actorId: actorId ?? input.confirmedBy,
           callId: call.id,
           entityType: "COMMITMENT",
