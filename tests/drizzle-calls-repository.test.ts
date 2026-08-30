@@ -17,6 +17,11 @@ function createDatabase() {
       carrier_id TEXT,
       negotiation_id TEXT,
       twilio_call_sid TEXT UNIQUE,
+      twilio_stream_sid TEXT UNIQUE,
+      recording_sid TEXT UNIQUE,
+      recording_status TEXT,
+      recording_url TEXT,
+      recording_duration_seconds INTEGER,
       realtime_session_id TEXT,
       direction TEXT NOT NULL,
       purpose TEXT NOT NULL,
@@ -56,6 +61,11 @@ describe("DrizzleCallRepository", () => {
       carrierId: "car_db",
       negotiationId: "neg_db",
       twilioCallSid: null,
+      twilioStreamSid: null,
+      recordingSid: null,
+      recordingStatus: null,
+      recordingUrl: null,
+      recordingDurationSeconds: null,
       realtimeSessionId: null,
       direction: "OUTBOUND",
       purpose: "QUOTE",
@@ -72,6 +82,11 @@ describe("DrizzleCallRepository", () => {
     try {
       await repository.insert(call);
       await repository.setProviderCallId(call.id, "CA_DB");
+      await repository.setStreamSid(call.id, "MZ_DB");
+      await repository.setRecording(call.id, {
+        recordingSid: "RE_DB",
+        recordingStatus: "IN_PROGRESS",
+      });
       await repository.setRealtimeSessionId(call.id, "rts_db");
       await repository.saveTranscript(call.id, "[0.0s] HUMAN: Hola");
       await repository.saveBrief(call.id, {
@@ -96,6 +111,8 @@ describe("DrizzleCallRepository", () => {
 
       assert.equal(transition?.changed, true);
       assert.equal(stored?.realtimeSessionId, "rts_db");
+      assert.equal(stored?.twilioStreamSid, "MZ_DB");
+      assert.equal(stored?.recordingSid, "RE_DB");
       assert.equal(stored?.status, "IN_PROGRESS");
       assert.equal(stored?.transcript, "[0.0s] HUMAN: Hola");
       assert.equal(stored?.brief?.outcome, "QUOTE_OBTAINED");

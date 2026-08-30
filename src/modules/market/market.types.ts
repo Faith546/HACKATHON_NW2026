@@ -23,6 +23,20 @@ export const SaveQuoteSchema = EvaluateQuoteSchema.extend({
 
 export type SaveQuoteInput = z.infer<typeof SaveQuoteSchema>;
 
+export interface QuoteGroundingEvidence {
+  callerItemId: string;
+  transcript: string;
+  startMs: number;
+  endMs: number;
+  amountCents: number;
+  currency: string;
+  provenance: "CALLER_AUDIO_FINAL_TRANSCRIPT";
+}
+
+export type GroundedSaveQuoteInput = SaveQuoteInput & {
+  grounding?: QuoteGroundingEvidence;
+};
+
 export const marketStrategies = [
   "LOWEST_VALID_TOTAL",
   "BALANCED_SCORE",
@@ -67,6 +81,19 @@ export function toQuoteResponse(
     validUntil: quote.validUntil,
     ...(dispatcherName ? { dispatcherName } : {}),
     ...(quote.callId === null ? {} : { callId: quote.callId }),
+    ...(quote.groundedCallerItemId === null
+      ? {}
+      : {
+          grounding: {
+            callerItemId: quote.groundedCallerItemId,
+            transcript: quote.groundedTranscript,
+            startMs: quote.groundedStartMs,
+            endMs: quote.groundedEndMs,
+            amountCents: quote.totalPriceCents,
+            currency: quote.currency,
+            provenance: "CALLER_AUDIO_FINAL_TRANSCRIPT",
+          },
+        }),
     valid: quote.valid,
     invalidReason: quote.invalidReason,
     mandateId: quote.mandateId,

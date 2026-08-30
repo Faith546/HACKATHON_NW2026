@@ -57,6 +57,8 @@ if (runtimeMode === "twilio") {
   new TwilioMediaBridge(
     voiceRuntime.callsService,
     voiceRuntime.realtimeService,
+    voiceRuntime.recordingService,
+    voiceRuntime.timingService,
     {
       apiKey: openAiApiKey,
       twilioAuthToken,

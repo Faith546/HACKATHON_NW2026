@@ -747,6 +747,11 @@ function seedCall(
     purpose: input.purpose,
     status: input.status,
     twilioCallSid: input.twilioCallSid ?? null,
+    twilioStreamSid: null,
+    recordingSid: null,
+    recordingStatus: null,
+    recordingUrl: null,
+    recordingDurationSeconds: null,
     createdAt: t0,
   }).run();
 }

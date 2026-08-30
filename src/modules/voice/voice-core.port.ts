@@ -58,6 +58,15 @@ export interface VoiceToolContext {
     endMs: number;
     transcriptExcerpt: string;
   };
+  quoteGrounding?: {
+    callerItemId: string;
+    transcript: string;
+    startMs: number;
+    endMs: number;
+    amountCents: number;
+    currency: string;
+    provenance: "CALLER_AUDIO_FINAL_TRANSCRIPT";
+  };
 }
 
 export interface VoiceCorePort {

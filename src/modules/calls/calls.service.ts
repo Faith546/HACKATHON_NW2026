@@ -101,6 +101,11 @@ export class CallsService implements CallScheduler {
       carrierId,
       negotiationId: normalizedInput.negotiationId ?? null,
       twilioCallSid: null,
+      twilioStreamSid: null,
+      recordingSid: null,
+      recordingStatus: null,
+      recordingUrl: null,
+      recordingDurationSeconds: null,
       realtimeSessionId: null,
       direction: "OUTBOUND",
       purpose: persistedPurpose(input.purpose),
@@ -308,6 +313,17 @@ export class CallsService implements CallScheduler {
     );
   }
 
+  async findByRecordingSid(recordingSid: string): Promise<Call | null> {
+    return this.dependencies.repository.findByRecordingSid(
+      requiredIdentifier(recordingSid, "recordingSid"),
+    );
+  }
+
+  async updateRecording(callId: string, patch: Parameters<CallRepository["setRecording"]>[1]): Promise<Call> {
+    await this.getById(callId);
+    return this.dependencies.repository.setRecording(callId, patch);
+  }
+
   async ensureProviderCallId(
     callId: string,
     providerCallId: string,
@@ -344,6 +360,38 @@ export class CallsService implements CallScheduler {
     }
   }
 
+  async ensureStreamIdentity(
+    callId: string,
+    providerCallId: string,
+    streamSid: string,
+  ): Promise<Call> {
+    requiredIdentifier(streamSid, "streamSid");
+    const call = await this.ensureProviderCallId(callId, providerCallId);
+    if (call.twilioStreamSid && call.twilioStreamSid !== streamSid) {
+      throw new ApiError(409, "STREAM_ID_CONFLICT", "La llamada ya tiene otro StreamSid.", {
+        callId, streamSid: call.twilioStreamSid,
+      });
+    }
+    const owner = await this.dependencies.repository.findByStreamSid(streamSid);
+    if (owner && owner.id !== callId) {
+      throw new ApiError(409, "STREAM_ID_CONFLICT", "El StreamSid pertenece a otra llamada.", {
+        callId, actualCallId: owner.id, streamSid,
+      });
+    }
+    if (call.twilioStreamSid === streamSid) return call;
+    try {
+      return await this.dependencies.repository.setStreamSid(callId, streamSid);
+    } catch (error) {
+      const concurrent = await this.dependencies.repository.findByStreamSid(streamSid);
+      if (concurrent && concurrent.id !== callId) {
+        throw new ApiError(409, "STREAM_ID_CONFLICT", "El StreamSid pertenece a otra llamada.", {
+          callId, actualCallId: concurrent.id, streamSid,
+        });
+      }
+      throw error;
+    }
+  }
+
   async createOrGetInbound(input: CreateInboundCallInput): Promise<Call> {
     const providerCallId = requiredIdentifier(
       input.providerCallId,
@@ -360,6 +408,11 @@ export class CallsService implements CallScheduler {
       carrierId: input.carrierId?.trim() || null,
       negotiationId: input.negotiationId?.trim() || null,
       twilioCallSid: providerCallId,
+      twilioStreamSid: null,
+      recordingSid: null,
+      recordingStatus: null,
+      recordingUrl: null,
+      recordingDurationSeconds: null,
       realtimeSessionId: null,
       direction: "INBOUND",
       purpose: input.purpose,

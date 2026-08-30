@@ -178,6 +178,11 @@ export const calls = sqliteTable(
     carrierId: text("carrier_id").references(() => carriers.id),
     negotiationId: text("negotiation_id").references(() => negotiations.id),
     twilioCallSid: text("twilio_call_sid"),
+    twilioStreamSid: text("twilio_stream_sid"),
+    recordingSid: text("recording_sid"),
+    recordingStatus: text("recording_status"),
+    recordingUrl: text("recording_url"),
+    recordingDurationSeconds: integer("recording_duration_seconds"),
     realtimeSessionId: text("realtime_session_id"),
     direction: text("direction").notNull(),
     purpose: text("purpose").notNull(),
@@ -192,6 +197,8 @@ export const calls = sqliteTable(
   },
   (table) => [
     uniqueIndex("uq_calls_twilio_call_sid").on(table.twilioCallSid),
+    uniqueIndex("uq_calls_twilio_stream_sid").on(table.twilioStreamSid),
+    uniqueIndex("uq_calls_recording_sid").on(table.recordingSid),
     check(
       "ck_calls_direction",
       sql`${table.direction} IN ('OUTBOUND', 'INBOUND')`,
@@ -226,6 +233,10 @@ export const quotes = sqliteTable(
       .notNull()
       .references(() => carriers.id),
     callId: text("call_id").references(() => calls.id),
+    groundedCallerItemId: text("grounded_caller_item_id"),
+    groundedTranscript: text("grounded_transcript"),
+    groundedStartMs: integer("grounded_start_ms"),
+    groundedEndMs: integer("grounded_end_ms"),
     totalPriceCents: integer("total_price_cents").notNull(),
     currency: text("currency").notNull().default("MXN"),
     pickupDate: text("pickup_date").notNull(),
@@ -249,6 +260,30 @@ export const quotes = sqliteTable(
       table.totalPriceCents,
     ),
     index("idx_quotes_mandate").on(table.mandateId),
+  ],
+);
+
+export const callTimingEvents = sqliteTable(
+  "call_timing_events",
+  {
+    id: text("id").primaryKey().$defaultFn(() => id("tim")),
+    callId: text("call_id")
+      .notNull()
+      .references(() => calls.id, { onDelete: "cascade" }),
+    streamSid: text("stream_sid"),
+    clock: text("clock").notNull(),
+    eventType: text("event_type").notNull(),
+    rawTimestampMs: integer("raw_timestamp_ms").notNull(),
+    itemId: text("item_id"),
+    metadataJson: text("metadata_json"),
+    createdAt: text("created_at").notNull().$defaultFn(nowIso),
+  },
+  (table) => [
+    check(
+      "ck_call_timing_clock",
+      sql`${table.clock} IN ('twilio_stream', 'openai_input', 'recording', 'local_observation')`,
+    ),
+    index("idx_call_timing_call_created").on(table.callId, table.createdAt),
   ],
 );
 

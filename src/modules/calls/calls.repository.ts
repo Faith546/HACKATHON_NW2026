@@ -20,7 +20,16 @@ export interface CallRepository {
   insert(call: Call): Promise<void>;
   findById(callId: string): Promise<Call | null>;
   findByProviderCallId(providerCallId: string): Promise<Call | null>;
+  findByStreamSid(streamSid: string): Promise<Call | null>;
+  findByRecordingSid(recordingSid: string): Promise<Call | null>;
   setProviderCallId(callId: string, providerCallId: string): Promise<Call>;
+  setStreamSid(callId: string, streamSid: string): Promise<Call>;
+  setRecording(callId: string, patch: {
+    recordingSid?: string | null;
+    recordingStatus?: string | null;
+    recordingUrl?: string | null;
+    recordingDurationSeconds?: number | null;
+  }): Promise<Call>;
   setRealtimeSessionId(callId: string, sessionId: string | null): Promise<Call>;
   saveTranscript(callId: string, transcript: string): Promise<Call>;
   setStatus(
@@ -61,11 +70,35 @@ export class InMemoryCallRepository implements CallRepository {
     return null;
   }
 
+  async findByStreamSid(streamSid: string): Promise<Call | null> {
+    for (const call of this.callsById.values()) {
+      if (call.twilioStreamSid === streamSid) return cloneCall(call);
+    }
+    return null;
+  }
+
+  async findByRecordingSid(recordingSid: string): Promise<Call | null> {
+    for (const call of this.callsById.values()) {
+      if (call.recordingSid === recordingSid) return cloneCall(call);
+    }
+    return null;
+  }
+
   async setProviderCallId(
     callId: string,
     providerCallId: string,
   ): Promise<Call> {
     return this.update(callId, { twilioCallSid: providerCallId });
+  }
+
+  async setStreamSid(callId: string, streamSid: string): Promise<Call> {
+    const owner = await this.findByStreamSid(streamSid);
+    if (owner && owner.id !== callId) throw new Error("StreamSid already exists");
+    return this.update(callId, { twilioStreamSid: streamSid });
+  }
+
+  async setRecording(callId: string, patch: Parameters<CallRepository["setRecording"]>[1]): Promise<Call> {
+    return this.update(callId, patch);
   }
 
   async setRealtimeSessionId(
@@ -162,6 +195,11 @@ function toCall(row: CallRow): Call {
     carrierId: row.carrierId,
     negotiationId: row.negotiationId,
     twilioCallSid: row.twilioCallSid,
+    twilioStreamSid: row.twilioStreamSid,
+    recordingSid: row.recordingSid,
+    recordingStatus: row.recordingStatus,
+    recordingUrl: row.recordingUrl,
+    recordingDurationSeconds: row.recordingDurationSeconds,
     realtimeSessionId: row.realtimeSessionId,
     direction: row.direction as Call["direction"],
     purpose: row.purpose as Call["purpose"],
@@ -186,6 +224,11 @@ export class DrizzleCallRepository implements CallRepository {
       carrierId: call.carrierId,
       negotiationId: call.negotiationId,
       twilioCallSid: call.twilioCallSid,
+      twilioStreamSid: call.twilioStreamSid,
+      recordingSid: call.recordingSid,
+      recordingStatus: call.recordingStatus,
+      recordingUrl: call.recordingUrl,
+      recordingDurationSeconds: call.recordingDurationSeconds,
       realtimeSessionId: call.realtimeSessionId,
       direction: call.direction,
       purpose: call.purpose,
@@ -218,11 +261,37 @@ export class DrizzleCallRepository implements CallRepository {
     return row ? toCall(row) : null;
   }
 
+  async findByStreamSid(streamSid: string): Promise<Call | null> {
+    const row = this.database
+      .select()
+      .from(callsTable)
+      .where(eq(callsTable.twilioStreamSid, streamSid))
+      .get();
+    return row ? toCall(row) : null;
+  }
+
+  async findByRecordingSid(recordingSid: string): Promise<Call | null> {
+    const row = this.database
+      .select()
+      .from(callsTable)
+      .where(eq(callsTable.recordingSid, recordingSid))
+      .get();
+    return row ? toCall(row) : null;
+  }
+
   async setProviderCallId(
     callId: string,
     providerCallId: string,
   ): Promise<Call> {
     return this.update(callId, { twilioCallSid: providerCallId });
+  }
+
+  async setStreamSid(callId: string, streamSid: string): Promise<Call> {
+    return this.update(callId, { twilioStreamSid: streamSid });
+  }
+
+  async setRecording(callId: string, patch: Parameters<CallRepository["setRecording"]>[1]): Promise<Call> {
+    return this.update(callId, patch);
   }
 
   async setRealtimeSessionId(

@@ -33,6 +33,7 @@ describe("RealtimeService", () => {
     await queue.onIdle();
 
     const toolExecutions: string[] = [];
+    const toolContexts: Array<Record<string, unknown>> = [];
     const voiceCore: VoiceCorePort = {
       resolveOutboundCallContext: async () => ({ toNumber: "+525500000001" }),
       resolveInboundCallContext: async () => ({
@@ -50,8 +51,9 @@ describe("RealtimeService", () => {
         pickupDate: "2026-09-03",
         notes: null,
       }),
-      executeVoiceTool: async ({ name }) => {
+      executeVoiceTool: async ({ name, context }) => {
         toolExecutions.push(name);
+        toolContexts.push(structuredClone(context) as unknown as Record<string, unknown>);
         return { ok: true };
       },
     };
@@ -71,6 +73,16 @@ describe("RealtimeService", () => {
     assert.equal(session.mandateId, "man_1");
     assert.equal(session.allowedTools.includes("recordQuote"), true);
     assert.equal(session.allowedTools.includes("createMandate"), false);
+    await realtime.appendTranscriptSegment(session.id, {
+      id: "turn_1",
+      speaker: "HUMAN",
+      source: "CALLER_AUDIO",
+      startMs: 100,
+      endMs: 900,
+      text: "Puedo hacerlo por ocho mil quinientos pesos.",
+      final: true,
+      interrupted: false,
+    });
     await realtime.executeTool(session.id, "recordQuote", {
       totalPrice: 8500,
       currency: "MXN",
@@ -78,6 +90,43 @@ describe("RealtimeService", () => {
       validUntil: "2026-09-03T02:00:00.000Z",
     });
     assert.deepEqual(toolExecutions, ["recordQuote"]);
+    assert.deepEqual(toolContexts[0]?.quoteGrounding, {
+      callerItemId: "turn_1",
+      transcript: "Puedo hacerlo por ocho mil quinientos pesos.",
+      startMs: 100,
+      endMs: 900,
+      amountCents: 850000,
+      currency: "MXN",
+      provenance: "CALLER_AUDIO_FINAL_TRANSCRIPT",
+    });
+    await realtime.appendTranscriptSegment(session.id, {
+      id: "turn_agent_money",
+      speaker: "AGENT",
+      source: "AGENT_AUDIO",
+      startMs: 910,
+      endMs: 1000,
+      text: "¿Confirmas diez mil pesos?",
+      final: true,
+      interrupted: false,
+    });
+    await realtime.appendTranscriptSegment(session.id, {
+      id: "turn_programmatic_yes",
+      speaker: "HUMAN",
+      source: "PROGRAMMATIC_TEXT",
+      startMs: 1010,
+      endMs: 1020,
+      text: "sí",
+      final: true,
+      interrupted: false,
+    });
+    await assert.rejects(
+      () => realtime.executeTool(session.id, "evaluateOffer", {
+        totalPrice: 10000,
+        currency: "MXN",
+        pickupDate: "2026-09-03",
+      }),
+      (error: unknown) => error instanceof ApiError && error.code === "UNGROUNDED_CALLER_MONEY",
+    );
     await assert.rejects(
       () => realtime.executeTool(session.id, "recordQuote", {
         totalPriceCents: 850000,
@@ -94,17 +143,9 @@ describe("RealtimeService", () => {
     );
 
     await realtime.appendTranscriptSegment(session.id, {
-      id: "turn_1",
-      speaker: "HUMAN",
-      startMs: 100,
-      endMs: 900,
-      text: "Puedo hacerlo por ocho mil quinientos.",
-      final: true,
-      interrupted: false,
-    });
-    await realtime.appendTranscriptSegment(session.id, {
       id: "turn_2",
       speaker: "AGENT",
+      source: "AGENT_AUDIO",
       startMs: 1000,
       endMs: 1600,
       text: "Perfecto, registraré la cotización.",

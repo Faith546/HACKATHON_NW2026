@@ -19,6 +19,12 @@ import { TwilioTelephonyGateway } from "../calls/twilio-telephony.gateway";
 import { InMemoryRealtimeSessionRepository } from "../realtime/realtime.repository";
 import { RealtimeService } from "../realtime/realtime.service";
 import {
+  DisabledRecordingGateway,
+  RecordingService,
+  TwilioRecordingGateway,
+  type RecordingGateway,
+} from "../recordings/recordings.service";
+import {
   TwilioRequestSignatureValidator,
 } from "../webhooks/webhooks.repository";
 import { WebhooksService } from "../webhooks/webhooks.service";
@@ -33,6 +39,12 @@ import type {
 import { DrizzleVoiceCoreAdapter } from "./drizzle-voice-core.adapter";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type * as databaseSchema from "../../db/schema";
+import {
+  DrizzleTimingRepository,
+  InMemoryTimingRepository,
+  TimingService,
+  type TimingRepository,
+} from "../timing/timing.service";
 
 class FakeTelephonyGateway implements TelephonyGateway {
   async startOutboundCall(
@@ -82,6 +94,8 @@ export interface VoiceRuntime {
   callsService: CallsService;
   realtimeService: RealtimeService;
   webhooksService: WebhooksService;
+  recordingService: RecordingService;
+  timingService: TimingService;
   queue: InMemoryJobQueue;
   publicBaseUrl: string;
   publicWssUrl: string;
@@ -101,6 +115,8 @@ export interface CreateVoiceRuntimeOptions {
   publicBaseUrl?: string;
   publicWssUrl?: string;
   requireValidTwilioSignature?: boolean;
+  recordingGateway?: RecordingGateway;
+  timingRepository?: TimingRepository;
 }
 
 export function createVoiceRuntime(
@@ -147,6 +163,16 @@ export function createVoiceRuntime(
       voiceCore,
       auditWriter,
     });
+  const recordingGateway = options.recordingGateway ?? configuredRecordingGateway();
+  const recordingService = new RecordingService(
+    callsService,
+    recordingGateway,
+    publicBaseUrl,
+  );
+  const timingService = new TimingService(
+    callsService,
+    options.timingRepository ?? new InMemoryTimingRepository(),
+  );
   const authToken = process.env.TWILIO_AUTH_TOKEN ?? "";
   const signatureValidator =
     options.signatureValidator ??
@@ -162,16 +188,27 @@ export function createVoiceRuntime(
       publicWssUrl,
       requireValidSignature:
         options.requireValidTwilioSignature ?? true,
+      recordingService,
     });
 
   return {
     callsService,
     realtimeService,
     webhooksService,
+    recordingService,
+    timingService,
     queue,
     publicBaseUrl,
     publicWssUrl,
   };
+}
+
+function configuredRecordingGateway(): RecordingGateway {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim() ?? "";
+  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim() ?? "";
+  return accountSid && authToken
+    ? new TwilioRecordingGateway(accountSid, authToken)
+    : new DisabledRecordingGateway();
 }
 
 type VoiceDatabase = BetterSQLite3Database<typeof databaseSchema>;
@@ -188,6 +225,7 @@ export function createDrizzleVoiceRuntime(
     ...options,
     voiceCore,
     repository: new DrizzleCallRepository(database),
+    timingRepository: new DrizzleTimingRepository(database),
     auditWriter: new AuditWriter(new DrizzleAuditEventRepository(database)),
   });
 }

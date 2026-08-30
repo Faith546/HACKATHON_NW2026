@@ -799,6 +799,27 @@ paths:
         "204":
           description: Estado procesado
 
+  /webhooks/twilio/recording-status:
+    post:
+      tags: [Webhooks]
+      operationId: receiveTwilioRecordingStatus
+      summary: Actualizar el lifecycle de una grabación
+      parameters:
+        - name: callId
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/TwilioRecordingStatusWebhook"
+      responses:
+        "204":
+          description: Estado de grabación procesado
+
 components:
   parameters:
     OperationId:
@@ -1144,6 +1165,13 @@ components:
         twilioCallSid:
           type: [string, "null"]
           example: CA1234567890
+        twilioStreamSid:
+          type: [string, "null"]
+          example: MZ1234567890
+        recording:
+          oneOf:
+            - $ref: "#/components/schemas/CallRecording"
+            - type: "null"
         direction:
           type: string
           enum: [INBOUND, OUTBOUND]
@@ -1168,6 +1196,25 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    CallRecording:
+      type: object
+      required: [sid, status, url, durationSeconds, correlationStatus, reason]
+      properties:
+        sid:
+          type: [string, "null"]
+        status:
+          type: string
+        url:
+          type: [string, "null"]
+        durationSeconds:
+          type: [integer, "null"]
+        correlationStatus:
+          type: string
+          enum: [UNRESOLVED]
+        reason:
+          type: string
+          enum: [RECORDING_START_OFFSET_UNKNOWN]
 
     SaveCallBriefRequest:
       type: object
@@ -1364,6 +1411,28 @@ components:
             createdAt:
               type: string
               format: date-time
+            grounding:
+              $ref: "#/components/schemas/QuoteGrounding"
+
+    QuoteGrounding:
+      type: object
+      required: [callerItemId, transcript, startMs, endMs, amountCents, currency, provenance]
+      properties:
+        callerItemId:
+          type: string
+        transcript:
+          type: string
+        startMs:
+          type: integer
+        endMs:
+          type: integer
+        amountCents:
+          type: integer
+        currency:
+          type: string
+        provenance:
+          type: string
+          enum: [CALLER_AUDIO_FINAL_TRANSCRIPT]
 
     SelectWinnerRequest:
       type: object
@@ -1662,3 +1731,19 @@ components:
           enum: [queued, initiated, ringing, in-progress, completed, busy, failed, no-answer, canceled]
         CallDuration:
           type: [string, "null"]
+
+    TwilioRecordingStatusWebhook:
+      type: object
+      required: [CallSid, RecordingSid, RecordingStatus]
+      properties:
+        CallSid:
+          type: string
+        RecordingSid:
+          type: string
+        RecordingStatus:
+          type: string
+          enum: [in-progress, processing, completed, absent, failed]
+        RecordingUrl:
+          type: string
+        RecordingDuration:
+          type: string

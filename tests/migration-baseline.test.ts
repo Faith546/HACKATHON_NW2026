@@ -33,7 +33,7 @@ describe("SQLite migration baseline", () => {
     const tracked = sqlite
       .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
       .get() as { count: number };
-    assert.equal(tracked.count, 2);
+    assert.equal(tracked.count, readMigrationFiles({ migrationsFolder }).length);
     sqlite.close();
   });
 
