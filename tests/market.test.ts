@@ -129,9 +129,12 @@ describe("Market Engine OpenAPI contract", () => {
     assert.equal(selectResponse.status, 200, JSON.stringify(selection));
     assert.equal(selection.winningQuoteId, first.id);
     assert.equal(selection.carrierId, context.carrierIds[0]);
-    assert.equal(selection.strategy, "LOWEST_VALID_TOTAL");
+    assert.strictEqual(
+      selection.strategy,
+      "BEST_WEIGHT_PRICE_RATIO",
+    );
     assert.deepEqual(selection.comparedQuoteIds, [first.id, second.id]);
-    assert.match(selection.explanation, /menor precio válido vigente/i);
+    assert.match(selection.explanation, /mejor relación Kilos\/Precio/i);
 
     const campaign = db
       .select()

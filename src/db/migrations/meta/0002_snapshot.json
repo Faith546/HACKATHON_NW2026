@@ -1,0 +1,1788 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "c177eb56-2ef0-46fc-a1f0-f3f14798361e",
+  "prevId": "03b17d02-359f-4256-9166-dafa2fb525a4",
+  "tables": {
+    "audit_events": {
+      "name": "audit_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_type": {
+          "name": "actor_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "call_id": {
+          "name": "call_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "mandate_id": {
+          "name": "mandate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "payload_json": {
+          "name": "payload_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_audit_operation_time": {
+          "name": "idx_audit_operation_time",
+          "columns": [
+            "operation_id",
+            "occurred_at"
+          ],
+          "isUnique": false
+        },
+        "idx_audit_events_mandate": {
+          "name": "idx_audit_events_mandate",
+          "columns": [
+            "mandate_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "audit_events_operation_id_operations_id_fk": {
+          "name": "audit_events_operation_id_operations_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "operations",
+          "columnsFrom": [
+            "operation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "audit_events_call_id_calls_id_fk": {
+          "name": "audit_events_call_id_calls_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "calls",
+          "columnsFrom": [
+            "call_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "audit_events_mandate_id_mandates_id_fk": {
+          "name": "audit_events_mandate_id_mandates_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "mandates",
+          "columnsFrom": [
+            "mandate_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_audit_events_actor_type": {
+          "name": "ck_audit_events_actor_type",
+          "value": "\"audit_events\".\"actor_type\" IN ('SYSTEM', 'INTERNAL_OPERATOR', 'OPERATIONS_AGENT', 'LOGISTICS_AGENT', 'CARRIER', 'DRIVER')"
+        }
+      }
+    },
+    "calls": {
+      "name": "calls",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "carrier_id": {
+          "name": "carrier_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "negotiation_id": {
+          "name": "negotiation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "twilio_call_sid": {
+          "name": "twilio_call_sid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "realtime_session_id": {
+          "name": "realtime_session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'QUEUED'"
+        },
+        "from_number": {
+          "name": "from_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "to_number": {
+          "name": "to_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "transcript_text": {
+          "name": "transcript_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "brief_json": {
+          "name": "brief_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_calls_twilio_call_sid": {
+          "name": "uq_calls_twilio_call_sid",
+          "columns": [
+            "twilio_call_sid"
+          ],
+          "isUnique": true
+        },
+        "idx_calls_operation_created": {
+          "name": "idx_calls_operation_created",
+          "columns": [
+            "operation_id",
+            "\"created_at\" desc"
+          ],
+          "isUnique": false
+        },
+        "idx_calls_carrier_status": {
+          "name": "idx_calls_carrier_status",
+          "columns": [
+            "carrier_id",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "calls_operation_id_operations_id_fk": {
+          "name": "calls_operation_id_operations_id_fk",
+          "tableFrom": "calls",
+          "tableTo": "operations",
+          "columnsFrom": [
+            "operation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "calls_carrier_id_carriers_id_fk": {
+          "name": "calls_carrier_id_carriers_id_fk",
+          "tableFrom": "calls",
+          "tableTo": "carriers",
+          "columnsFrom": [
+            "carrier_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "calls_negotiation_id_negotiations_id_fk": {
+          "name": "calls_negotiation_id_negotiations_id_fk",
+          "tableFrom": "calls",
+          "tableTo": "negotiations",
+          "columnsFrom": [
+            "negotiation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_calls_direction": {
+          "name": "ck_calls_direction",
+          "value": "\"calls\".\"direction\" IN ('OUTBOUND', 'INBOUND')"
+        },
+        "ck_calls_purpose": {
+          "name": "ck_calls_purpose",
+          "value": "\"calls\".\"purpose\" IN ('OPERATIONS', 'QUOTE', 'COMMIT', 'EXECUTION', 'INCIDENT', 'DELIVERY', 'RENEGOTIATION', 'ESCALATION')"
+        },
+        "ck_calls_status": {
+          "name": "ck_calls_status",
+          "value": "\"calls\".\"status\" IN ('QUEUED', 'RINGING', 'IN_PROGRESS', 'COMPLETED', 'BUSY', 'NO_ANSWER', 'FAILED')"
+        }
+      }
+    },
+    "campaigns": {
+      "name": "campaigns",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'QUEUED'"
+        },
+        "requested_carriers": {
+          "name": "requested_carriers",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "max_parallel_calls": {
+          "name": "max_parallel_calls",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 3
+        },
+        "strategy": {
+          "name": "strategy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'LOWEST_VALID_TOTAL'"
+        },
+        "winning_quote_id": {
+          "name": "winning_quote_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_campaigns_operation": {
+          "name": "idx_campaigns_operation",
+          "columns": [
+            "operation_id",
+            "\"created_at\" desc"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "campaigns_operation_id_operations_id_fk": {
+          "name": "campaigns_operation_id_operations_id_fk",
+          "tableFrom": "campaigns",
+          "tableTo": "operations",
+          "columnsFrom": [
+            "operation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_campaigns_status": {
+          "name": "ck_campaigns_status",
+          "value": "\"campaigns\".\"status\" IN ('QUEUED', 'CALLING', 'COLLECTING_QUOTES', 'READY_TO_SELECT', 'COMPLETED', 'FAILED')"
+        },
+        "ck_campaigns_requested_carriers": {
+          "name": "ck_campaigns_requested_carriers",
+          "value": "\"campaigns\".\"requested_carriers\" > 0"
+        },
+        "ck_campaigns_max_parallel_calls": {
+          "name": "ck_campaigns_max_parallel_calls",
+          "value": "\"campaigns\".\"max_parallel_calls\" BETWEEN 1 AND 3"
+        },
+        "ck_campaigns_strategy": {
+          "name": "ck_campaigns_strategy",
+          "value": "\"campaigns\".\"strategy\" IN ('LOWEST_VALID_TOTAL', 'BALANCED_SCORE', 'BEST_WEIGHT_PRICE_RATIO')"
+        }
+      }
+    },
+    "carriers": {
+      "name": "carriers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dispatcher_name": {
+          "name": "dispatcher_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "score": {
+          "name": "score",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 80
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_carriers_phone": {
+          "name": "uq_carriers_phone",
+          "columns": [
+            "phone"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_carriers_score": {
+          "name": "ck_carriers_score",
+          "value": "\"carriers\".\"score\" BETWEEN 0 AND 100"
+        },
+        "ck_carriers_active": {
+          "name": "ck_carriers_active",
+          "value": "\"carriers\".\"active\" IN (0, 1)"
+        }
+      }
+    },
+    "commitments": {
+      "name": "commitments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quote_id": {
+          "name": "quote_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "carrier_id": {
+          "name": "carrier_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'PROPOSED'"
+        },
+        "mandate_id": {
+          "name": "mandate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "total_price_cents": {
+          "name": "total_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'MXN'"
+        },
+        "pickup_date": {
+          "name": "pickup_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "verbal_agreement_call_id": {
+          "name": "verbal_agreement_call_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "confirmed_by": {
+          "name": "confirmed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "exact_terms": {
+          "name": "exact_terms",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "evidence_start_ms": {
+          "name": "evidence_start_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "evidence_end_ms": {
+          "name": "evidence_end_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "evidence_transcript_excerpt": {
+          "name": "evidence_transcript_excerpt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "summary_channel": {
+          "name": "summary_channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "summary_recipient": {
+          "name": "summary_recipient",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "summary_message": {
+          "name": "summary_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "summary_provider_id": {
+          "name": "summary_provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "summary_sent_at": {
+          "name": "summary_sent_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_commitments_one_active_per_operation": {
+          "name": "uq_commitments_one_active_per_operation",
+          "columns": [
+            "operation_id"
+          ],
+          "isUnique": true,
+          "where": "\"commitments\".\"status\" IN ('PROPOSED', 'VERBALLY_AGREED', 'MANDATE_VALIDATED', 'SUMMARY_PENDING', 'SUMMARY_SENT', 'VALID', 'IN_EXECUTION')"
+        },
+        "idx_commitments_operation": {
+          "name": "idx_commitments_operation",
+          "columns": [
+            "operation_id"
+          ],
+          "isUnique": false
+        },
+        "idx_commitments_mandate": {
+          "name": "idx_commitments_mandate",
+          "columns": [
+            "mandate_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "commitments_operation_id_operations_id_fk": {
+          "name": "commitments_operation_id_operations_id_fk",
+          "tableFrom": "commitments",
+          "tableTo": "operations",
+          "columnsFrom": [
+            "operation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "commitments_quote_id_quotes_id_fk": {
+          "name": "commitments_quote_id_quotes_id_fk",
+          "tableFrom": "commitments",
+          "tableTo": "quotes",
+          "columnsFrom": [
+            "quote_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "commitments_carrier_id_carriers_id_fk": {
+          "name": "commitments_carrier_id_carriers_id_fk",
+          "tableFrom": "commitments",
+          "tableTo": "carriers",
+          "columnsFrom": [
+            "carrier_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "commitments_mandate_id_mandates_id_fk": {
+          "name": "commitments_mandate_id_mandates_id_fk",
+          "tableFrom": "commitments",
+          "tableTo": "mandates",
+          "columnsFrom": [
+            "mandate_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "commitments_verbal_agreement_call_id_calls_id_fk": {
+          "name": "commitments_verbal_agreement_call_id_calls_id_fk",
+          "tableFrom": "commitments",
+          "tableTo": "calls",
+          "columnsFrom": [
+            "verbal_agreement_call_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_commitments_status": {
+          "name": "ck_commitments_status",
+          "value": "\"commitments\".\"status\" IN ('PROPOSED', 'VERBALLY_AGREED', 'MANDATE_VALIDATED', 'SUMMARY_PENDING', 'SUMMARY_SENT', 'VALID', 'IN_EXECUTION', 'FULFILLED', 'CANCELLED_BY_CARRIER', 'CANCELLED')"
+        },
+        "ck_commitments_total_price": {
+          "name": "ck_commitments_total_price",
+          "value": "\"commitments\".\"total_price_cents\" > 0"
+        },
+        "ck_commitments_evidence_start": {
+          "name": "ck_commitments_evidence_start",
+          "value": "\"commitments\".\"evidence_start_ms\" IS NULL OR \"commitments\".\"evidence_start_ms\" >= 0"
+        },
+        "ck_commitments_evidence_end": {
+          "name": "ck_commitments_evidence_end",
+          "value": "\"commitments\".\"evidence_end_ms\" IS NULL OR \"commitments\".\"evidence_end_ms\" > 0"
+        },
+        "ck_commitments_evidence_range": {
+          "name": "ck_commitments_evidence_range",
+          "value": "\"commitments\".\"evidence_start_ms\" IS NULL OR \"commitments\".\"evidence_end_ms\" IS NULL OR \"commitments\".\"evidence_start_ms\" < \"commitments\".\"evidence_end_ms\""
+        },
+        "ck_commitments_summary_channel": {
+          "name": "ck_commitments_summary_channel",
+          "value": "\"commitments\".\"summary_channel\" IS NULL OR \"commitments\".\"summary_channel\" IN ('SMS', 'EMAIL')"
+        }
+      }
+    },
+    "escalations": {
+      "name": "escalations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "call_id": {
+          "name": "call_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "incident_id": {
+          "name": "incident_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "context_summary": {
+          "name": "context_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "human_phone": {
+          "name": "human_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "twilio_conference_sid": {
+          "name": "twilio_conference_sid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "human_participant_call_sid": {
+          "name": "human_participant_call_sid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "previous_operation_status": {
+          "name": "previous_operation_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'CREATED'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'REQUESTED'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_escalations_operation": {
+          "name": "idx_escalations_operation",
+          "columns": [
+            "operation_id"
+          ],
+          "isUnique": false
+        },
+        "idx_escalations_status": {
+          "name": "idx_escalations_status",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "escalations_operation_id_operations_id_fk": {
+          "name": "escalations_operation_id_operations_id_fk",
+          "tableFrom": "escalations",
+          "tableTo": "operations",
+          "columnsFrom": [
+            "operation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "escalations_call_id_calls_id_fk": {
+          "name": "escalations_call_id_calls_id_fk",
+          "tableFrom": "escalations",
+          "tableTo": "calls",
+          "columnsFrom": [
+            "call_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "escalations_incident_id_incidents_id_fk": {
+          "name": "escalations_incident_id_incidents_id_fk",
+          "tableFrom": "escalations",
+          "tableTo": "incidents",
+          "columnsFrom": [
+            "incident_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_escalations_status": {
+          "name": "ck_escalations_status",
+          "value": "\"escalations\".\"status\" IN ('REQUESTED', 'DIALING_HUMAN', 'HUMAN_JOINED', 'RESOLVED', 'FAILED')"
+        }
+      }
+    },
+    "incidents": {
+      "name": "incidents",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "call_id": {
+          "name": "call_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'GENERAL'"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reported_by": {
+          "name": "reported_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'OPEN'"
+        },
+        "proposed_change_json": {
+          "name": "proposed_change_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "evaluation_code": {
+          "name": "evaluation_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "mandate_id": {
+          "name": "mandate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_incidents_operation_status": {
+          "name": "idx_incidents_operation_status",
+          "columns": [
+            "operation_id",
+            "status"
+          ],
+          "isUnique": false
+        },
+        "idx_incidents_mandate": {
+          "name": "idx_incidents_mandate",
+          "columns": [
+            "mandate_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "incidents_operation_id_operations_id_fk": {
+          "name": "incidents_operation_id_operations_id_fk",
+          "tableFrom": "incidents",
+          "tableTo": "operations",
+          "columnsFrom": [
+            "operation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "incidents_call_id_calls_id_fk": {
+          "name": "incidents_call_id_calls_id_fk",
+          "tableFrom": "incidents",
+          "tableTo": "calls",
+          "columnsFrom": [
+            "call_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "incidents_mandate_id_mandates_id_fk": {
+          "name": "incidents_mandate_id_mandates_id_fk",
+          "tableFrom": "incidents",
+          "tableTo": "mandates",
+          "columnsFrom": [
+            "mandate_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_incidents_status": {
+          "name": "ck_incidents_status",
+          "value": "\"incidents\".\"status\" IN ('OPEN', 'ALLOWED_CHANGE', 'NEEDS_ESCALATION', 'RESOLVED')"
+        }
+      }
+    },
+    "mandates": {
+      "name": "mandates",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'ACTIVE'"
+        },
+        "max_total_price_cents": {
+          "name": "max_total_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'MXN'"
+        },
+        "pickup_date": {
+          "name": "pickup_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_mandates_operation_version": {
+          "name": "uq_mandates_operation_version",
+          "columns": [
+            "operation_id",
+            "version"
+          ],
+          "isUnique": true
+        },
+        "uq_mandates_one_active_per_operation": {
+          "name": "uq_mandates_one_active_per_operation",
+          "columns": [
+            "operation_id"
+          ],
+          "isUnique": true,
+          "where": "\"mandates\".\"status\" = 'ACTIVE'"
+        },
+        "idx_mandates_operation": {
+          "name": "idx_mandates_operation",
+          "columns": [
+            "operation_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "mandates_operation_id_operations_id_fk": {
+          "name": "mandates_operation_id_operations_id_fk",
+          "tableFrom": "mandates",
+          "tableTo": "operations",
+          "columnsFrom": [
+            "operation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_mandates_version": {
+          "name": "ck_mandates_version",
+          "value": "\"mandates\".\"version\" > 0"
+        },
+        "ck_mandates_status": {
+          "name": "ck_mandates_status",
+          "value": "\"mandates\".\"status\" IN ('ACTIVE', 'SUPERSEDED')"
+        },
+        "ck_mandates_max_total_price": {
+          "name": "ck_mandates_max_total_price",
+          "value": "\"mandates\".\"max_total_price_cents\" > 0"
+        }
+      }
+    },
+    "negotiations": {
+      "name": "negotiations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "campaign_id": {
+          "name": "campaign_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "carrier_id": {
+          "name": "carrier_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'PENDING'"
+        },
+        "latest_offer_json": {
+          "name": "latest_offer_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_negotiations_campaign_carrier": {
+          "name": "uq_negotiations_campaign_carrier",
+          "columns": [
+            "campaign_id",
+            "carrier_id"
+          ],
+          "isUnique": true
+        },
+        "idx_negotiations_operation_status": {
+          "name": "idx_negotiations_operation_status",
+          "columns": [
+            "operation_id",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "negotiations_operation_id_operations_id_fk": {
+          "name": "negotiations_operation_id_operations_id_fk",
+          "tableFrom": "negotiations",
+          "tableTo": "operations",
+          "columnsFrom": [
+            "operation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "negotiations_campaign_id_campaigns_id_fk": {
+          "name": "negotiations_campaign_id_campaigns_id_fk",
+          "tableFrom": "negotiations",
+          "tableTo": "campaigns",
+          "columnsFrom": [
+            "campaign_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "negotiations_carrier_id_carriers_id_fk": {
+          "name": "negotiations_carrier_id_carriers_id_fk",
+          "tableFrom": "negotiations",
+          "tableTo": "carriers",
+          "columnsFrom": [
+            "carrier_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_negotiations_status": {
+          "name": "ck_negotiations_status",
+          "value": "\"negotiations\".\"status\" IN ('PENDING', 'CALLING', 'NEGOTIATING', 'QUOTED', 'REFUSED', 'NO_ANSWER', 'SELECTED', 'REJECTED')"
+        }
+      }
+    },
+    "operations": {
+      "name": "operations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "customer_name": {
+          "name": "customer_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "container_number": {
+          "name": "container_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "destination": {
+          "name": "destination",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "service": {
+          "name": "service",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'DRAYAGE'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'CREATED'"
+        },
+        "selected_carrier_id": {
+          "name": "selected_carrier_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "weight_kg": {
+          "name": "weight_kg",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 10000
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_operations_status": {
+          "name": "idx_operations_status",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "idx_operations_container": {
+          "name": "idx_operations_container",
+          "columns": [
+            "container_number"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "operations_selected_carrier_id_carriers_id_fk": {
+          "name": "operations_selected_carrier_id_carriers_id_fk",
+          "tableFrom": "operations",
+          "tableTo": "carriers",
+          "columnsFrom": [
+            "selected_carrier_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_operations_service": {
+          "name": "ck_operations_service",
+          "value": "\"operations\".\"service\" = 'DRAYAGE'"
+        },
+        "ck_operations_status": {
+          "name": "ck_operations_status",
+          "value": "\"operations\".\"status\" IN ('CREATED', 'SOURCING', 'BOOKED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED', 'NEEDS_RENEGOTIATION', 'ESCALATED', 'NEEDS_CARRIER', 'CANCELLED')"
+        }
+      }
+    },
+    "quotes": {
+      "name": "quotes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "negotiation_id": {
+          "name": "negotiation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "carrier_id": {
+          "name": "carrier_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "call_id": {
+          "name": "call_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "total_price_cents": {
+          "name": "total_price_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'MXN'"
+        },
+        "pickup_date": {
+          "name": "pickup_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dispatcher_name": {
+          "name": "dispatcher_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "valid": {
+          "name": "valid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "invalid_reason": {
+          "name": "invalid_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "mandate_id": {
+          "name": "mandate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "valid_until": {
+          "name": "valid_until",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_quotes_negotiation": {
+          "name": "uq_quotes_negotiation",
+          "columns": [
+            "negotiation_id"
+          ],
+          "isUnique": true
+        },
+        "idx_quotes_operation_valid_price": {
+          "name": "idx_quotes_operation_valid_price",
+          "columns": [
+            "operation_id",
+            "valid",
+            "total_price_cents"
+          ],
+          "isUnique": false
+        },
+        "idx_quotes_mandate": {
+          "name": "idx_quotes_mandate",
+          "columns": [
+            "mandate_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "quotes_operation_id_operations_id_fk": {
+          "name": "quotes_operation_id_operations_id_fk",
+          "tableFrom": "quotes",
+          "tableTo": "operations",
+          "columnsFrom": [
+            "operation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "quotes_negotiation_id_negotiations_id_fk": {
+          "name": "quotes_negotiation_id_negotiations_id_fk",
+          "tableFrom": "quotes",
+          "tableTo": "negotiations",
+          "columnsFrom": [
+            "negotiation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "quotes_carrier_id_carriers_id_fk": {
+          "name": "quotes_carrier_id_carriers_id_fk",
+          "tableFrom": "quotes",
+          "tableTo": "carriers",
+          "columnsFrom": [
+            "carrier_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "quotes_call_id_calls_id_fk": {
+          "name": "quotes_call_id_calls_id_fk",
+          "tableFrom": "quotes",
+          "tableTo": "calls",
+          "columnsFrom": [
+            "call_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "quotes_mandate_id_mandates_id_fk": {
+          "name": "quotes_mandate_id_mandates_id_fk",
+          "tableFrom": "quotes",
+          "tableTo": "mandates",
+          "columnsFrom": [
+            "mandate_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ck_quotes_total_price": {
+          "name": "ck_quotes_total_price",
+          "value": "\"quotes\".\"total_price_cents\" > 0"
+        },
+        "ck_quotes_valid": {
+          "name": "ck_quotes_valid",
+          "value": "\"quotes\".\"valid\" IN (0, 1)"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {
+      "idx_calls_operation_created": {
+        "columns": {
+          "\"created_at\" desc": {
+            "isExpression": true
+          }
+        }
+      },
+      "idx_campaigns_operation": {
+        "columns": {
+          "\"created_at\" desc": {
+            "isExpression": true
+          }
+        }
+      }
+    }
+  }
+}

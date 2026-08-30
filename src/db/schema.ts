@@ -44,6 +44,7 @@ export const operations = sqliteTable(
     selectedCarrierId: text("selected_carrier_id").references(
       () => carriers.id,
     ),
+    weightKg: integer("weight_kg").notNull().default(10000),
     notes: text("notes"),
     createdAt: text("created_at").notNull().$defaultFn(nowIso),
     updatedAt: text("updated_at").notNull().$defaultFn(nowIso),
@@ -125,7 +126,7 @@ export const campaigns = sqliteTable(
     ),
     check(
       "ck_campaigns_strategy",
-      sql`${table.strategy} IN ('LOWEST_VALID_TOTAL', 'BALANCED_SCORE')`,
+      sql`${table.strategy} IN ('LOWEST_VALID_TOTAL', 'BALANCED_SCORE', 'BEST_WEIGHT_PRICE_RATIO')`,
     ),
     index("idx_campaigns_operation").on(
       table.operationId,
