@@ -1,5 +1,11 @@
 import { db } from "../../db";
-import { auditEvents, campaigns, operations } from "../../db/schema";
+import {
+  auditEvents,
+  campaigns,
+  carriers,
+  negotiations,
+  operations,
+} from "../../db/schema";
 import { and, desc, eq, inArray, like } from "drizzle-orm";
 import { ApiError } from "../../shared/http/api-error";
 import type { CallsService } from "../calls/calls.service";
@@ -59,6 +65,7 @@ import type {
   EvaluateQuoteInput,
   GroundedSaveQuoteInput,
 } from "../market/market.types";
+import { toNegotiationResponse } from "../negotiations/negotiations.types";
 import {
   operationsService as defaultOperationsService,
   type OperationsService,
@@ -577,7 +584,11 @@ export class IntegrationService {
       this.operationsService.getOperationStatus(operationId),
       this.marketService.listOperationQuotes(operationId),
     ]);
-    return { ...status, quotes };
+    return {
+      ...status,
+      quotes,
+      carrierUpdates: carrierUpdatesForOperation(operationId),
+    };
   }
 
   private async createOperationAutonomously(
@@ -877,6 +888,27 @@ function latestCampaignForOperation(operationId: string) {
       .limit(1)
       .get() ?? null
   );
+}
+
+function carrierUpdatesForOperation(operationId: string) {
+  const campaign = latestCampaignForOperation(operationId);
+  if (!campaign) return [];
+  return db
+    .select({
+      negotiation: negotiations,
+      carrierName: carriers.name,
+      dispatcherName: carriers.dispatcherName,
+    })
+    .from(negotiations)
+    .innerJoin(carriers, eq(carriers.id, negotiations.carrierId))
+    .where(eq(negotiations.campaignId, campaign.id))
+    .orderBy(negotiations.createdAt, negotiations.id)
+    .all()
+    .map(({ negotiation, carrierName, dispatcherName }) => ({
+      ...toNegotiationResponse(negotiation),
+      carrierName,
+      dispatcherName,
+    }));
 }
 
 function assertEquivalentOperation(

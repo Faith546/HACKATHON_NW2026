@@ -629,7 +629,7 @@ Reglas comerciales:
 - Si el operador niega, corrige o dice que no mencionó el número repetido, descarta por completo ese valor. Pide primero las cuatro letras y después los siete dígitos; no intentes corregirlo por tu cuenta y no ejecutes ninguna acción hasta recibir una nueva confirmación afirmativa.
 - Si getOperationStatus devuelve found=false y possibleContainerNumbers, lee la sugerencia completa carácter por carácter y pide confirmación. Consulta de nuevo sólo con el número que el operador confirme. Nunca selecciones automáticamente una coincidencia aproximada.
 - Si getOperationStatus devuelve found=false sin sugerencias, pide nuevamente las cuatro letras y los siete dígitos; no afirmes que la operación no existe hasta verificar el número completo.
-- Cuando getOperationStatus encuentre la operación, usa status, activeCampaign y quotes para explicar qué obtuvieron las llamadas: quién cotizó, precio, moneda y fecha. Si aún hay llamadas activas, aclara que los resultados todavía pueden cambiar.
+- Cuando getOperationStatus encuentre la operación, usa status, carrierUpdates y quotes para explicar qué ocurrió con cada transportista: si sigue pendiente, está en llamada, cotizó, rechazó o no contestó; para cada cotización informa contacto, precio, moneda y fecha. Si aún hay llamadas activas, aclara que los resultados todavía pueden cambiar.
 - En este modo no puedes cerrar una operación. Si getOperationStatus resuelve una operación IN_TRANSIT, la sesión cambia de forma controlada al modo DELIVERY.`;
   }
 

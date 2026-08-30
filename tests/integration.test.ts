@@ -165,6 +165,29 @@ describe("IntegrationService facade", () => {
         pickupDate: "2026-09-03",
       },
     });
+    const carrierId = `car_container_${randomUUID()}`;
+    const campaignId = `cmp_container_${randomUUID()}`;
+    const negotiationId = `neg_container_${randomUUID()}`;
+    db.insert(carriers).values({
+      id: carrierId,
+      name: "Transportes Norte",
+      dispatcherName: "Ana",
+      phone: `+521${Date.now().toString().slice(-10)}`,
+    }).run();
+    db.insert(campaigns).values({
+      id: campaignId,
+      operationId: operation.id,
+      requestedCarriers: 1,
+      maxParallelCalls: 1,
+      status: "COMPLETED",
+    }).run();
+    db.insert(negotiations).values({
+      id: negotiationId,
+      operationId: operation.id,
+      campaignId,
+      carrierId,
+      status: "NO_ANSWER",
+    }).run();
     const voiceIntegration = createIntegrationService({
       callsService: {
         bindOperationContext: async () => undefined,
@@ -187,6 +210,22 @@ describe("IntegrationService facade", () => {
       assert.deepEqual(
         (exactResult as { quotes: unknown[] }).quotes,
         [],
+      );
+      assert.deepEqual(
+        (exactResult as {
+          carrierUpdates: Array<Record<string, unknown>>;
+        }).carrierUpdates.map((update) => ({
+          carrierName: update.carrierName,
+          dispatcherName: update.dispatcherName,
+          status: update.status,
+        })),
+        [
+          {
+            carrierName: "Transportes Norte",
+            dispatcherName: "Ana",
+            status: "NO_ANSWER",
+          },
+        ],
       );
 
       const missingCharacter =
@@ -213,8 +252,11 @@ describe("IntegrationService facade", () => {
       db.delete(auditEvents)
         .where(eq(auditEvents.operationId, operation.id))
         .run();
+      db.delete(negotiations).where(eq(negotiations.id, negotiationId)).run();
+      db.delete(campaigns).where(eq(campaigns.id, campaignId)).run();
       db.delete(mandates).where(eq(mandates.operationId, operation.id)).run();
       db.delete(operations).where(eq(operations.id, operation.id)).run();
+      db.delete(carriers).where(eq(carriers.id, carrierId)).run();
     }
   });
 });
