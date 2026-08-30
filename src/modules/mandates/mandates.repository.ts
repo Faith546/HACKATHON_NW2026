@@ -1,0 +1,277 @@
+import { randomUUID } from "node:crypto";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { db } from "../../db";
+import {
+  auditEvents,
+  campaigns,
+  commitments,
+  escalations,
+  mandates,
+  negotiations,
+  operations,
+} from "../../db/schema";
+import { ApiError } from "../../shared/http/api-error";
+import type { CreateMandateVersionInput } from "./mandates.types";
+
+const mutableMandateOperationStatuses = new Set([
+  "CREATED",
+  "SOURCING",
+  "NEEDS_RENEGOTIATION",
+  "ESCALATED",
+  "NEEDS_CARRIER",
+]);
+const activeCampaignStatuses = [
+  "QUEUED",
+  "CALLING",
+  "COLLECTING_QUOTES",
+  "READY_TO_SELECT",
+] as const;
+
+export class MandatesRepository {
+  getActiveMandate(operationId: string) {
+    return db
+      .select()
+      .from(mandates)
+      .where(
+        and(
+          eq(mandates.operationId, operationId),
+          eq(mandates.status, "ACTIVE"),
+        ),
+      )
+      .orderBy(desc(mandates.version))
+      .limit(1)
+      .get() ?? null;
+  }
+
+  createMandateVersion(
+    operationId: string,
+    input: CreateMandateVersionInput,
+    actorId?: string,
+  ) {
+    return db.transaction((tx) => {
+      const operation = tx
+        .select()
+        .from(operations)
+        .where(eq(operations.id, operationId))
+        .get();
+      if (!operation) {
+        throw new ApiError(
+          404,
+          "RESOURCE_NOT_FOUND",
+          "Operación no encontrada.",
+          { operationId },
+        );
+      }
+      if (!mutableMandateOperationStatuses.has(operation.status)) {
+        throw new ApiError(
+          409,
+          "MANDATE_CHANGE_NOT_ALLOWED",
+          `No se puede crear una versión de mandato desde ${operation.status}.`,
+          { operationId, operationStatus: operation.status },
+        );
+      }
+
+      const currentMandate = tx
+        .select()
+        .from(mandates)
+        .where(
+          and(
+            eq(mandates.operationId, operationId),
+            eq(mandates.status, "ACTIVE"),
+          ),
+        )
+        .orderBy(desc(mandates.version))
+        .limit(1)
+        .get();
+      if (!currentMandate) {
+        throw new ApiError(
+          409,
+          "ACTIVE_MANDATE_REQUIRED",
+          "La operación no tiene un mandato activo.",
+          { operationId },
+        );
+      }
+
+      const occurredAt = new Date().toISOString();
+      tx.update(mandates)
+        .set({ status: "SUPERSEDED" })
+        .where(eq(mandates.id, currentMandate.id))
+        .run();
+
+      const maxTotalPriceCents = Math.round(input.maxTotalPrice * 100);
+      const mandate = tx
+        .insert(mandates)
+        .values({
+          operationId,
+          version: currentMandate.version + 1,
+          status: "ACTIVE",
+          maxTotalPriceCents,
+          currency: input.currency,
+          pickupDate: input.pickupDate,
+          notes: input.notes ?? null,
+          createdAt: occurredAt,
+        })
+        .returning()
+        .get();
+
+      const invalidatedCampaigns = tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.operationId, operationId),
+            inArray(campaigns.status, [...activeCampaignStatuses]),
+          ),
+        )
+        .all();
+      if (invalidatedCampaigns.length > 0) {
+        const campaignIds = invalidatedCampaigns.map((campaign) => campaign.id);
+        tx.update(campaigns)
+          .set({ status: "FAILED", completedAt: occurredAt })
+          .where(inArray(campaigns.id, campaignIds))
+          .run();
+        tx.update(negotiations)
+          .set({ status: "REJECTED", updatedAt: occurredAt })
+          .where(inArray(negotiations.campaignId, campaignIds))
+          .run();
+        for (const campaign of invalidatedCampaigns) {
+          tx.insert(auditEvents)
+            .values({
+              id: `evt_${randomUUID()}`,
+              operationId,
+              mandateId: mandate.id,
+              eventType: "CAMPAIGN_INVALIDATED_BY_MANDATE",
+              actorType: "SYSTEM",
+              entityType: "CAMPAIGN",
+              entityId: campaign.id,
+              payloadJson: JSON.stringify({
+                previousMandateId: currentMandate.id,
+                activeMandateId: mandate.id,
+              }),
+              occurredAt,
+            })
+          .run();
+        }
+      }
+
+      const sourcingEscalation =
+        operation.status === "ESCALATED"
+          ? tx
+              .select({ id: escalations.id })
+              .from(escalations)
+              .where(
+                and(
+                  eq(escalations.operationId, operationId),
+                  eq(escalations.previousOperationStatus, "SOURCING"),
+                  inArray(escalations.status, [
+                    "REQUESTED",
+                    "DIALING_HUMAN",
+                    "HUMAN_JOINED",
+                  ]),
+                ),
+              )
+              .limit(1)
+              .get()
+          : null;
+      if (operation.status === "SOURCING" || sourcingEscalation) {
+        const staleCommitments = tx
+          .select({ id: commitments.id })
+          .from(commitments)
+          .where(
+            and(
+              eq(commitments.operationId, operationId),
+              inArray(commitments.status, [
+                "PROPOSED",
+                "VERBALLY_AGREED",
+                "MANDATE_VALIDATED",
+                "SUMMARY_PENDING",
+                "SUMMARY_SENT",
+                "VALID",
+              ]),
+            ),
+          )
+          .all();
+        if (staleCommitments.length > 0) {
+          tx.update(commitments)
+            .set({ status: "CANCELLED", updatedAt: occurredAt })
+            .where(
+              inArray(
+                commitments.id,
+                staleCommitments.map((commitment) => commitment.id),
+              ),
+            )
+            .run();
+          tx.insert(auditEvents)
+            .values({
+              id: `evt_${randomUUID()}`,
+              operationId,
+              mandateId: mandate.id,
+              eventType: "COMMITMENTS_INVALIDATED_BY_MANDATE",
+              actorType: "SYSTEM",
+              entityType: "MANDATE",
+              entityId: mandate.id,
+              payloadJson: JSON.stringify({
+                commitmentIds: staleCommitments.map(
+                  (commitment) => commitment.id,
+                ),
+                previousMandateId: currentMandate.id,
+              }),
+              occurredAt,
+            })
+            .run();
+        }
+        if (operation.status === "ESCALATED") {
+          tx.update(escalations)
+            .set({ previousOperationStatus: "NEEDS_RENEGOTIATION" })
+            .where(eq(escalations.id, sourcingEscalation!.id))
+            .run();
+          tx.update(operations)
+            .set({ selectedCarrierId: null, updatedAt: occurredAt })
+            .where(eq(operations.id, operationId))
+            .run();
+        } else {
+          tx.update(operations)
+            .set({
+              status: "NEEDS_RENEGOTIATION",
+              selectedCarrierId: null,
+              updatedAt: occurredAt,
+            })
+            .where(eq(operations.id, operationId))
+            .run();
+        }
+      }
+
+      tx.update(operations)
+        .set({ updatedAt: occurredAt })
+        .where(eq(operations.id, operationId))
+        .run();
+      tx.insert(auditEvents)
+        .values({
+          id: `evt_${randomUUID()}`,
+          operationId,
+          mandateId: mandate.id,
+          eventType: "MANDATE_UPDATED",
+          actorType: "INTERNAL_OPERATOR",
+          actorId: actorId ?? null,
+          entityType: "MANDATE",
+          entityId: mandate.id,
+          payloadJson: JSON.stringify({
+            previousMandateId: currentMandate.id,
+            previousVersion: currentMandate.version,
+            version: mandate.version,
+            previousMaxTotalPriceCents:
+              currentMandate.maxTotalPriceCents,
+            maxTotalPriceCents,
+            currency: mandate.currency,
+            pickupDate: mandate.pickupDate,
+          }),
+          occurredAt,
+        })
+        .run();
+
+      return mandate;
+    }, { behavior: "immediate" });
+  }
+}
+
+export const mandatesRepository = new MandatesRepository();

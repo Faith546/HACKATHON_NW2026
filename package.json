@@ -5,16 +5,43 @@
   "description": "Swagger preview for the NextWave voice logistics demo API",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "validate:openapi": "swagger-cli validate openapi.yaml"
+    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "validate:openapi": "swagger-cli validate openapi.yaml",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "express": "^5.1.0",
+    "@openai/agents": "^0.17.0",
+    "@openai/agents-extensions": "^0.17.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/swagger-ui-express": "^4.1.8",
+    "@types/yamljs": "^0.2.34",
+    "better-sqlite3": "^12.10.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "express": "^5.2.1",
+    "i": "^0.3.7",
     "js-yaml": "^4.1.0",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "twilio": "^6.1.0",
+    "ws": "^8.21.3",
+    "yamljs": "^0.3.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@apidevtools/swagger-cli": "^4.0.4"
+    "@apidevtools/swagger-cli": "^4.0.4",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^24.10.0",
+    "@types/ws": "^8.18.1",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.2"
   }
 }

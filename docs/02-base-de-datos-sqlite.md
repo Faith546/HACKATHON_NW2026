@@ -18,9 +18,9 @@ data/nextwave-demo.sqlite
 - No hay tabla de jobs: la cola existe únicamente en memoria de Node.js.
 - No hay tabla de eventos distribuidos ni outbox.
 - No hay tabla separada de transcripts o call briefs: se guardan en `calls`.
-- No hay tabla separada de evidencia: el commitment guarda URL y timestamps.
+- No hay tabla separada de evidencia: el commitment guarda offsets y un fragmento del transcript.
 - No hay tabla separada de notificaciones: el recap se guarda en `commitments`.
-- No hay almacenamiento de blobs de audio dentro de SQLite; solamente URLs de Twilio.
+- No se almacenan grabaciones, URLs de grabación ni blobs de audio.
 - Los objetos variables se guardan como JSON serializado en columnas `TEXT`.
 
 Estas decisiones son apropiadas para una demo, pero no para un sistema distribuido o regulado.
@@ -68,8 +68,7 @@ Puede usarse `crypto.randomUUID()` con el prefijo correspondiente.
 ### Fechas
 
 - Instantes: ISO 8601 UTC en `TEXT`, por ejemplo `2026-09-03T16:00:00.000Z`.
-- Fechas del mandato: `YYYY-MM-DD`.
-- Horarios del mandato: `HH:mm` y una zona horaria separada.
+- La única fecha del mandato usa `YYYY-MM-DD`; no existe hora inicial o final.
 
 ### Dinero
 
@@ -139,7 +138,6 @@ Entidad raíz del proceso logístico.
 | `service` | TEXT | `DRAYAGE`. |
 | `status` | TEXT | Estado operacional. |
 | `selected_carrier_id` | TEXT FK | Carrier ganador, si existe. |
-| `active_mandate_version` | INTEGER | Versión activa para lectura rápida. |
 | `notes` | TEXT | Información libre de la demo. |
 | `created_at`, `updated_at` | TEXT | Timestamps. |
 
@@ -155,16 +153,11 @@ Cada fila es una versión inmutable de la autoridad operacional.
 | `status` | TEXT | `ACTIVE` o `SUPERSEDED`. |
 | `max_total_price_cents` | INTEGER | Límite total. |
 | `currency` | TEXT | `MXN`. |
-| `pickup_date` | TEXT | Fecha permitida. |
-| `pickup_start`, `pickup_end` | TEXT | Ventana horaria. |
-| `timezone` | TEXT | Zona aplicable. |
-| `additional_charges_allowed` | INTEGER | Regla. |
-| `max_delay_minutes` | INTEGER | Tolerancia. |
-| `date_change_allowed` | INTEGER | Regla. |
-| `route_change_allowed` | INTEGER | Regla. |
-| `conditions_json` | TEXT | Condiciones adicionales. |
-| `change_reason` | TEXT | Motivo de la nueva versión. |
+| `pickup_date` | TEXT | Único día autorizado. |
+| `notes` | TEXT | Contexto libre; no crea reglas deterministas. |
 | `created_at` | TEXT | Momento de autorización. |
+
+La columna `version` existe únicamente en esta tabla. `quotes`, `commitments`, `incidents` y `audit_events` conservan una FK `mandate_id → mandates.id`; nunca copian el número de versión. La versión se obtiene mediante `JOIN` cuando se necesita mostrarla.
 
 ### 6.4 `campaigns`
 
@@ -213,9 +206,7 @@ Registra llamadas entrantes y salientes, su correlación y resultado post-call.
 | `purpose` | TEXT | `QUOTE`, `COMMIT`, `INCIDENT`, etc. |
 | `status` | TEXT | Lifecycle de la llamada. |
 | `from_number`, `to_number` | TEXT | Números telefónicos. |
-| `recording_sid`, `recording_url` | TEXT | Evidencia. |
-| `recording_duration_seconds` | INTEGER | Duración. |
-| `transcript_text` | TEXT | Transcripción completa opcional. |
+| `transcript_text` | TEXT | Único contenido persistido de la conversación. |
 | `brief_json` | TEXT | Call brief estructurado. |
 | `started_at`, `ended_at`, `created_at` | TEXT | Timestamps. |
 
@@ -232,15 +223,13 @@ Cotización final estructurada de una negociación.
 | `negotiation_id` | TEXT FK | Negociación. |
 | `carrier_id` | TEXT FK | Carrier. |
 | `call_id` | TEXT FK | Evidencia conversacional. |
-| `base_price_cents` | INTEGER | Tarifa base. |
-| `additional_charges_cents` | INTEGER | Extras. |
-| `total_price_cents` | INTEGER | Total evaluado. |
+| `total_price_cents` | INTEGER | Precio total informado y evaluado. |
 | `currency` | TEXT | Moneda. |
-| `pickup_date`, `pickup_time` | TEXT | Oferta de pickup. |
-| `conditions_json` | TEXT | Condiciones mencionadas. |
+| `pickup_date` | TEXT | Día ofrecido. |
+| `notes` | TEXT | Contexto libre de la cotización. |
 | `valid` | INTEGER | Cumplía el mandato al registrarse. |
 | `invalid_reason` | TEXT | Causa de invalidez. |
-| `mandate_version` | INTEGER | Autoridad usada para evaluar. |
+| `mandate_id` | TEXT FK | Mandato exacto usado para evaluar. |
 | `valid_until` | TEXT | Expiración. |
 | `created_at` | TEXT | Recepción. |
 
@@ -255,15 +244,15 @@ Acuerdo oficial y verificable con el carrier ganador.
 | `quote_id` | TEXT FK | Oferta ganadora. |
 | `carrier_id` | TEXT FK | Carrier comprometido. |
 | `status` | TEXT | Máquina de estados. |
-| `mandate_version` | INTEGER | Versión que autorizó el acuerdo. |
+| `mandate_id` | TEXT FK | Mandato exacto que autorizó el acuerdo. |
 | `total_price_cents` | INTEGER | Copia inmutable del precio. |
 | `currency` | TEXT | Moneda. |
-| `pickup_at` | TEXT | Fecha/hora comprometida. |
+| `pickup_date` | TEXT | Día comprometido. |
 | `verbal_agreement_call_id` | TEXT FK | Llamada de confirmación. |
 | `confirmed_by` | TEXT | Persona que dijo sí. |
 | `exact_terms` | TEXT | Recap verbal. |
-| `recording_url` | TEXT | Grabación. |
 | `evidence_start_ms`, `evidence_end_ms` | INTEGER | Intervalo exacto. |
+| `evidence_transcript_excerpt` | TEXT | Fragmento confirmado del transcript. |
 | `summary_channel` | TEXT | SMS o EMAIL. |
 | `summary_recipient`, `summary_message` | TEXT | Recap. |
 | `summary_provider_id` | TEXT | SID/id del proveedor. |
@@ -281,13 +270,13 @@ Problemas reportados durante ejecución.
 | `id` | TEXT PK | Incidencia. |
 | `operation_id` | TEXT FK | Operación. |
 | `call_id` | TEXT FK | Llamada que la originó. |
-| `type` | TEXT | Avería, retraso, cancelación, etc. |
+| `type` | TEXT | Etiqueta libre y amplia, por ejemplo `GENERAL`. |
 | `description` | TEXT | Descripción interpretada. |
 | `reported_by` | TEXT | Persona. |
 | `status` | TEXT | Resolución. |
 | `proposed_change_json` | TEXT | Cambio solicitado. |
 | `evaluation_code` | TEXT | Resultado del Mandate Engine. |
-| `mandate_version` | INTEGER | Versión usada. |
+| `mandate_id` | TEXT FK nullable | Mandato usado para evaluar la incidencia. |
 | `created_at`, `resolved_at` | TEXT | Timestamps. |
 
 ### 6.10 `escalations`
@@ -319,7 +308,7 @@ Timeline append-only de decisiones y acciones.
 | `actor_type`, `actor_id` | TEXT | Quién actuó. |
 | `call_id` | TEXT FK nullable | Llamada relacionada. |
 | `entity_type`, `entity_id` | TEXT | Entidad afectada. |
-| `mandate_version` | INTEGER | Contexto de autoridad. |
+| `mandate_id` | TEXT FK nullable | Mandato relacionado con el evento. |
 | `payload_json` | TEXT | Datos relevantes. |
 | `occurred_at` | TEXT | Timestamp. |
 
@@ -357,7 +346,6 @@ CREATE TABLE operations (
     'NEEDS_RENEGOTIATION', 'ESCALATED', 'NEEDS_CARRIER', 'CANCELLED'
   )),
   selected_carrier_id TEXT REFERENCES carriers(id),
-  active_mandate_version INTEGER,
   notes TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -371,18 +359,7 @@ CREATE TABLE mandates (
   max_total_price_cents INTEGER NOT NULL CHECK (max_total_price_cents > 0),
   currency TEXT NOT NULL DEFAULT 'MXN',
   pickup_date TEXT NOT NULL,
-  pickup_start TEXT NOT NULL,
-  pickup_end TEXT NOT NULL,
-  timezone TEXT NOT NULL DEFAULT 'America/Mexico_City',
-  additional_charges_allowed INTEGER NOT NULL DEFAULT 0
-    CHECK (additional_charges_allowed IN (0, 1)),
-  max_delay_minutes INTEGER NOT NULL DEFAULT 120 CHECK (max_delay_minutes >= 0),
-  date_change_allowed INTEGER NOT NULL DEFAULT 0
-    CHECK (date_change_allowed IN (0, 1)),
-  route_change_allowed INTEGER NOT NULL DEFAULT 0
-    CHECK (route_change_allowed IN (0, 1)),
-  conditions_json TEXT NOT NULL DEFAULT '{}',
-  change_reason TEXT,
+  notes TEXT,
   created_at TEXT NOT NULL,
   UNIQUE (operation_id, version)
 );
@@ -441,9 +418,6 @@ CREATE TABLE calls (
   )),
   from_number TEXT,
   to_number TEXT,
-  recording_sid TEXT UNIQUE,
-  recording_url TEXT,
-  recording_duration_seconds INTEGER,
   transcript_text TEXT,
   brief_json TEXT,
   started_at TEXT,
@@ -457,17 +431,13 @@ CREATE TABLE quotes (
   negotiation_id TEXT NOT NULL REFERENCES negotiations(id) ON DELETE CASCADE,
   carrier_id TEXT NOT NULL REFERENCES carriers(id),
   call_id TEXT REFERENCES calls(id),
-  base_price_cents INTEGER NOT NULL CHECK (base_price_cents >= 0),
-  additional_charges_cents INTEGER NOT NULL DEFAULT 0
-    CHECK (additional_charges_cents >= 0),
   total_price_cents INTEGER NOT NULL CHECK (total_price_cents > 0),
   currency TEXT NOT NULL DEFAULT 'MXN',
   pickup_date TEXT NOT NULL,
-  pickup_time TEXT NOT NULL,
-  conditions_json TEXT NOT NULL DEFAULT '[]',
+  notes TEXT,
   valid INTEGER NOT NULL CHECK (valid IN (0, 1)),
   invalid_reason TEXT,
-  mandate_version INTEGER NOT NULL,
+  mandate_id TEXT NOT NULL REFERENCES mandates(id),
   valid_until TEXT NOT NULL,
   created_at TEXT NOT NULL,
   UNIQUE (negotiation_id)
@@ -483,16 +453,16 @@ CREATE TABLE commitments (
     'SUMMARY_PENDING', 'SUMMARY_SENT', 'VALID', 'IN_EXECUTION',
     'FULFILLED', 'CANCELLED_BY_CARRIER', 'CANCELLED'
   )),
-  mandate_version INTEGER NOT NULL,
+  mandate_id TEXT NOT NULL REFERENCES mandates(id),
   total_price_cents INTEGER NOT NULL CHECK (total_price_cents > 0),
   currency TEXT NOT NULL DEFAULT 'MXN',
-  pickup_at TEXT NOT NULL,
+  pickup_date TEXT NOT NULL,
   verbal_agreement_call_id TEXT REFERENCES calls(id),
   confirmed_by TEXT,
   exact_terms TEXT,
-  recording_url TEXT,
   evidence_start_ms INTEGER CHECK (evidence_start_ms IS NULL OR evidence_start_ms >= 0),
   evidence_end_ms INTEGER CHECK (evidence_end_ms IS NULL OR evidence_end_ms > 0),
+  evidence_transcript_excerpt TEXT,
   summary_channel TEXT CHECK (summary_channel IS NULL OR summary_channel IN ('SMS', 'EMAIL')),
   summary_recipient TEXT,
   summary_message TEXT,
@@ -517,10 +487,7 @@ CREATE TABLE incidents (
   id TEXT PRIMARY KEY,
   operation_id TEXT NOT NULL REFERENCES operations(id) ON DELETE CASCADE,
   call_id TEXT REFERENCES calls(id),
-  type TEXT NOT NULL CHECK (type IN (
-    'TRUCK_BREAKDOWN', 'DELAY', 'SCHEDULE_CHANGE',
-    'CARRIER_CANCELLATION', 'PRICE_CHANGE', 'OTHER'
-  )),
+  type TEXT NOT NULL DEFAULT 'GENERAL',
   description TEXT NOT NULL,
   reported_by TEXT,
   status TEXT NOT NULL CHECK (status IN (
@@ -528,7 +495,7 @@ CREATE TABLE incidents (
   )),
   proposed_change_json TEXT,
   evaluation_code TEXT,
-  mandate_version INTEGER,
+  mandate_id TEXT REFERENCES mandates(id),
   created_at TEXT NOT NULL,
   resolved_at TEXT
 );
@@ -561,7 +528,7 @@ CREATE TABLE audit_events (
   call_id TEXT REFERENCES calls(id),
   entity_type TEXT,
   entity_id TEXT,
-  mandate_version INTEGER,
+  mandate_id TEXT REFERENCES mandates(id),
   payload_json TEXT NOT NULL DEFAULT '{}',
   occurred_at TEXT NOT NULL
 );
@@ -605,31 +572,40 @@ La primera opción evita una referencia circular en el orden de creación y sigu
 
 ## 9. Transacciones obligatorias
 
-Aunque sea una demo, cuatro operaciones deben ser atómicas.
+Aunque sea una demo, cinco operaciones deben ser atómicas.
 
-### 9.1 Crear una nueva versión de mandato
+### 9.1 Crear operación y mandato inicial
+
+El `POST /operations` ejecuta dentro de una transacción:
+
+1. Insertar `operations` con estado `CREATED`.
+2. Insertar `mandates` versión `1` y estado `ACTIVE`.
+3. Insertar `OPERATION_CREATED` y `MANDATE_CREATED` en `audit_events` con el nuevo `mandate_id`.
+
+Si falla cualquiera de los pasos, no se conserva una operación sin mandato.
+
+### 9.2 Crear una nueva versión de mandato
 
 Dentro de una transacción:
 
 1. Leer la versión activa.
 2. Marcarla `SUPERSEDED`.
 3. Insertar la nueva versión `ACTIVE`.
-4. Actualizar `operations.active_mandate_version`.
-5. Insertar `MANDATE_UPDATED` en `audit_events`.
+4. Insertar `MANDATE_UPDATED` en `audit_events` con el nuevo `mandate_id`.
 
 El índice parcial evita dos versiones activas.
 
-### 9.2 Registrar una quote
+### 9.3 Registrar una quote
 
 Dentro de una transacción:
 
-1. Recalcular el precio total.
+1. Normalizar el precio total a centavos.
 2. Evaluar el mandato.
 3. Insertar `quotes`.
 4. Actualizar `negotiations.status = 'QUOTED'`.
 5. Insertar `QUOTE_RECORDED`.
 
-### 9.3 Autorizar un commitment
+### 9.4 Autorizar un commitment
 
 Usar `BEGIN IMMEDIATE` para reservar el único writer:
 
@@ -643,7 +619,7 @@ Usar `BEGIN IMMEDIATE` para reservar el único writer:
 
 El índice `uq_commitments_one_active_per_operation` funciona como segunda defensa contra double booking.
 
-### 9.4 Confirmar pickup o delivery
+### 9.5 Confirmar pickup o delivery
 
 Dentro de la misma transacción se actualizan:
 
@@ -755,9 +731,8 @@ También puede existir un script local `npm run demo:reset` que cierre la aplica
 - SQLite solo permite un writer a la vez.
 - La cola en memoria no se reconstruye desde la base.
 - No hay cifrado de datos ni control de acceso.
-- Las URLs de grabación pueden depender del proveedor.
 - Los JSON en `TEXT` no tienen validación estructural de base de datos.
-- No existe retención o eliminación automática de grabaciones.
+- Sin grabación no existe evidencia de audio reproducible; solo transcript y offsets temporales.
 - Una sola instancia del backend es una condición del diseño.
 
 Para las tres llamadas concurrentes de la demo, WAL, transacciones cortas y `busy_timeout=5000` son suficientes. Si el sistema evolucionara a producción, las primeras migraciones serían PostgreSQL, una cola persistente y almacenamiento de objetos controlado.

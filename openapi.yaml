@@ -53,8 +53,8 @@ paths:
     post:
       tags: [Operations]
       operationId: createOperation
-      summary: Crear una operación de drayage
-      description: Lo llama el Operations Agent o la interfaz de demo después de interpretar la solicitud del operador.
+      summary: Crear una operación de drayage con su mandato inicial
+      description: Lo llama el Operations Agent o la interfaz de demo. La operación y el mandato v1 se crean en una sola transacción.
       requestBody:
         required: true
         content:
@@ -63,7 +63,7 @@ paths:
               $ref: "#/components/schemas/CreateOperationRequest"
       responses:
         "201":
-          description: Operación creada
+          description: Operación y mandato v1 creados
           content:
             application/json:
               schema:
@@ -147,30 +147,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Operation"
-        "409":
-          $ref: "#/components/responses/Conflict"
-
-  /operations/{operationId}/mandates:
-    parameters:
-      - $ref: "#/components/parameters/OperationId"
-    post:
-      tags: [Mandates]
-      operationId: createMandate
-      summary: Crear la primera versión del mandato
-      description: Solo corresponde al lado interno. En la demo no hay autenticación real.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateMandateRequest"
-      responses:
-        "201":
-          description: Mandato v1 creado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Mandate"
         "409":
           $ref: "#/components/responses/Conflict"
 
@@ -318,7 +294,7 @@ paths:
     get:
       tags: [Calls]
       operationId: getCall
-      summary: Consultar llamada, transcript y grabación
+      summary: Consultar llamada y transcript
       responses:
         "200":
           description: Llamada encontrada
@@ -557,7 +533,7 @@ paths:
     post:
       tags: [Commitments]
       operationId: attachCommitmentEvidence
-      summary: Vincular el commitment al segmento exacto del audio
+      summary: Vincular el commitment a un fragmento temporal del transcript
       requestBody:
         required: true
         content:
@@ -579,7 +555,7 @@ paths:
       tags: [Commitments]
       operationId: enqueueCommitmentSummary
       summary: Enviar el recap escrito y finalizar el commitment
-      description: Agrega un job a la cola en memoria. El commitment solo pasa a VALID cuando el proveedor acepta el envío.
+      description: Agrega un job SMS a la cola en memoria. El commitment solo pasa a VALID cuando el proveedor acepta el envío. Repetir la misma solicitud reencola de forma idempotente un recap agotado.
       requestBody:
         required: true
         content:
@@ -683,6 +659,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/Escalation"
 
+  /escalations/{escalationId}:
+    parameters:
+      - $ref: "#/components/parameters/EscalationId"
+    get:
+      tags: [Escalations]
+      operationId: getEscalation
+      summary: Consultar el estado de una escalación asíncrona
+      responses:
+        "200":
+          description: Escalación encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Escalation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /escalations/{escalationId}/resolve:
+    parameters:
+      - $ref: "#/components/parameters/EscalationId"
+    post:
+      tags: [Escalations]
+      operationId: resolveEscalation
+      summary: Cerrar la escalación y restaurar el flujo de la operación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveEscalationRequest"
+      responses:
+        "200":
+          description: Escalación resuelta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Escalation"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /operations/{operationId}/pickup/confirm:
     parameters:
       - $ref: "#/components/parameters/OperationId"
@@ -752,8 +768,6 @@ paths:
       operationId: receiveTwilioVoiceCall
       summary: Recibir una llamada entrante de Twilio
       description: Twilio usa form-urlencoded. El backend crea la llamada y devuelve TwiML para conectar el stream o conferencia.
-      servers:
-        - url: http://127.0.0.1:3000
       requestBody:
         required: true
         content:
@@ -768,15 +782,13 @@ paths:
               schema:
                 type: string
               example: |
-                <Response><Connect><Stream url="wss://demo.example/ws/twilio-media" /></Connect></Response>
+                <Response><Connect><Stream url="wss://demo.example/ws/twilio-media/call_01JABC123" /></Connect></Response>
 
   /webhooks/twilio/status:
     post:
       tags: [Webhooks]
       operationId: receiveTwilioCallStatus
       summary: Actualizar el lifecycle de una llamada
-      servers:
-        - url: http://127.0.0.1:3000
       requestBody:
         required: true
         content:
@@ -786,23 +798,6 @@ paths:
       responses:
         "204":
           description: Estado procesado
-
-  /webhooks/twilio/recording:
-    post:
-      tags: [Webhooks]
-      operationId: receiveTwilioRecording
-      summary: Asociar la grabación terminada con la llamada
-      servers:
-        - url: http://127.0.0.1:3000
-      requestBody:
-        required: true
-        content:
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: "#/components/schemas/TwilioRecordingWebhook"
-      responses:
-        "204":
-          description: Grabación asociada
 
 components:
   parameters:
@@ -927,7 +922,7 @@ components:
 
     CreateOperationRequest:
       type: object
-      required: [customerName, containerNumber, origin, destination, service]
+      required: [customerName, containerNumber, origin, destination, service, mandate]
       properties:
         customerName:
           type: string
@@ -944,6 +939,8 @@ components:
         service:
           type: string
           enum: [DRAYAGE]
+        mandate:
+          $ref: "#/components/schemas/CreateMandateRequest"
         notes:
           type: string
 
@@ -961,9 +958,6 @@ components:
             selectedCarrierId:
               type: [string, "null"]
               example: car_atlas
-            activeMandateVersion:
-              type: [integer, "null"]
-              example: 1
             createdAt:
               type: string
               format: date-time
@@ -998,7 +992,7 @@ components:
 
     CreateMandateRequest:
       type: object
-      required: [maxTotalPrice, currency, pickupDate, pickupStart, pickupEnd]
+      required: [maxTotalPrice, currency, pickupDate]
       properties:
         maxTotalPrice:
           type: number
@@ -1011,39 +1005,11 @@ components:
           type: string
           format: date
           example: 2026-09-03
-        pickupStart:
-          type: string
-          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
-          example: "08:00"
-        pickupEnd:
-          type: string
-          pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
-          example: "12:00"
-        additionalChargesAllowed:
-          type: boolean
-          default: false
-        maxDelayMinutes:
-          type: integer
-          minimum: 0
-          default: 120
-        dateChangeAllowed:
-          type: boolean
-          default: false
-        routeChangeAllowed:
-          type: boolean
-          default: false
         notes:
           type: string
 
     CreateMandateVersionRequest:
-      allOf:
-        - $ref: "#/components/schemas/CreateMandateRequest"
-        - type: object
-          required: [changeReason]
-          properties:
-            changeReason:
-              type: string
-              example: El operador autorizó también pickup el viernes durante la escalación.
+      $ref: "#/components/schemas/CreateMandateRequest"
 
     Mandate:
       allOf:
@@ -1063,8 +1029,6 @@ components:
             status:
               type: string
               enum: [ACTIVE, SUPERSEDED]
-            changeReason:
-              type: [string, "null"]
             createdAt:
               type: string
               format: date-time
@@ -1189,11 +1153,12 @@ components:
         status:
           type: string
           enum: [QUEUED, RINGING, IN_PROGRESS, COMPLETED, BUSY, NO_ANSWER, FAILED]
-        recordingUrl:
-          type: [string, "null"]
-          format: uri
         transcript:
           type: [string, "null"]
+        brief:
+          oneOf:
+            - $ref: "#/components/schemas/CallBrief"
+            - type: "null"
         startedAt:
           type: [string, "null"]
           format: date-time
@@ -1250,7 +1215,7 @@ components:
           type: string
         actorType:
           type: string
-          enum: [INTERNAL_OPERATOR, CARRIER, DISPATCHER, DRIVER]
+          enum: [CARRIER, DISPATCHER, DRIVER]
         carrierId:
           type: [string, "null"]
         operationId:
@@ -1259,7 +1224,7 @@ components:
           type: [string, "null"]
         mode:
           type: string
-          enum: [CREATE_OPERATION, QUOTE, COMMIT, EXECUTION, INCIDENT, DELIVERY]
+          enum: [QUOTE, COMMIT, EXECUTION, INCIDENT, DELIVERY]
 
     RealtimeSession:
       type: object
@@ -1272,11 +1237,12 @@ components:
           type: string
         agent:
           type: string
-          enum: [OPERATIONS_AGENT, LOGISTICS_AGENT]
+          enum: [LOGISTICS_AGENT]
         mode:
           type: string
-        mandateVersion:
-          type: [integer, "null"]
+        mandateId:
+          type: [string, "null"]
+          example: man_01JABC123
         allowedTools:
           type: array
           items:
@@ -1312,15 +1278,11 @@ components:
 
     EvaluateOfferRequest:
       type: object
-      required: [basePrice, additionalCharges, currency, pickupDate, pickupTime]
+      required: [totalPrice, currency, pickupDate]
       properties:
-        basePrice:
+        totalPrice:
           type: number
           example: 8500
-        additionalCharges:
-          type: number
-          minimum: 0
-          example: 0
         currency:
           type: string
           example: MXN
@@ -1328,14 +1290,9 @@ components:
           type: string
           format: date
           example: 2026-09-03
-        pickupTime:
+        notes:
           type: string
-          example: "10:00"
-        conditions:
-          type: array
-          items:
-            type: string
-          example: [30 minutos de tolerancia]
+          example: Carrier disponible durante el día.
 
     EvaluateChangeRequest:
       type: object
@@ -1343,31 +1300,24 @@ components:
         proposedPickupDate:
           type: string
           format: date
-        proposedPickupTime:
-          type: string
         proposedTotalPrice:
           type: number
-        delayMinutes:
-          type: integer
-        routeChanged:
-          type: boolean
-          default: false
         notes:
           type: string
 
     EvaluationResult:
       type: object
-      required: [allowed, code, mandateVersion, reasons]
+      required: [allowed, code, mandateId, reasons]
       properties:
         allowed:
           type: boolean
           example: false
         code:
           type: string
-          enum: [ALLOWED, PRICE_EXCEEDS_MANDATE, DATE_OUTSIDE_MANDATE, TIME_OUTSIDE_MANDATE, CHARGE_NOT_ALLOWED, DELAY_EXCEEDS_MANDATE, ROUTE_CHANGE_NOT_ALLOWED]
-        mandateVersion:
-          type: integer
-          example: 1
+          enum: [ALLOWED, CURRENCY_MISMATCH, PRICE_EXCEEDS_MANDATE, DATE_OUTSIDE_MANDATE]
+        mandateId:
+          type: string
+          example: man_01JABC123
         reasons:
           type: array
           items:
@@ -1392,7 +1342,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/RecordQuoteRequest"
         - type: object
-          required: [id, negotiationId, carrierId, totalPrice, valid, mandateVersion, createdAt]
+          required: [id, negotiationId, carrierId, totalPrice, valid, mandateId, createdAt]
           properties:
             id:
               type: string
@@ -1408,8 +1358,9 @@ components:
               type: boolean
             invalidReason:
               type: [string, "null"]
-            mandateVersion:
-              type: integer
+            mandateId:
+              type: string
+              example: man_01JABC123
             createdAt:
               type: string
               format: date-time
@@ -1459,7 +1410,7 @@ components:
 
     Commitment:
       type: object
-      required: [id, operationId, quoteId, carrierId, status, mandateVersion, totalPrice, currency, pickupAt, createdAt]
+      required: [id, operationId, quoteId, carrierId, status, mandateId, totalPrice, currency, pickupDate, createdAt]
       properties:
         id:
           type: string
@@ -1472,24 +1423,24 @@ components:
           type: string
         status:
           $ref: "#/components/schemas/CommitmentStatus"
-        mandateVersion:
-          type: integer
+        mandateId:
+          type: string
+          example: man_01JABC123
         totalPrice:
           type: number
         currency:
           type: string
-        pickupAt:
+        pickupDate:
           type: string
-          format: date-time
+          format: date
         verbalAgreementCallId:
           type: [string, "null"]
         evidenceStartMs:
           type: [integer, "null"]
         evidenceEndMs:
           type: [integer, "null"]
-        recordingUrl:
+        evidenceTranscriptExcerpt:
           type: [string, "null"]
-          format: uri
         summaryChannel:
           type: [string, "null"]
           enum: [SMS, EMAIL, null]
@@ -1513,17 +1464,14 @@ components:
           example: Laura, dispatcher de Transportes Atlas
         exactTerms:
           type: string
-          example: $8,500 MXN, jueves 10:00, Manzanillo a Guadalajara.
+          example: $8,500 MXN, pickup durante el jueves, Manzanillo a Guadalajara.
 
     AttachEvidenceRequest:
       type: object
-      required: [callId, recordingUrl, startMs, endMs]
+      required: [callId, startMs, endMs, transcriptExcerpt]
       properties:
         callId:
           type: string
-        recordingUrl:
-          type: string
-          format: uri
         startMs:
           type: integer
           minimum: 0
@@ -1532,6 +1480,9 @@ components:
           type: integer
           minimum: 1
           example: 139800
+        transcriptExcerpt:
+          type: string
+          example: Sí, confirmamos el servicio por $8,500 MXN para el jueves.
 
     SendSummaryRequest:
       type: object
@@ -1539,13 +1490,13 @@ components:
       properties:
         channel:
           type: string
-          enum: [SMS, EMAIL]
+          enum: [SMS]
         recipient:
           type: string
           example: "+525555555501"
         message:
           type: string
-          example: Confirmamos Manzanillo a Guadalajara, jueves 10:00, total $8,500 MXN.
+          example: Confirmamos Manzanillo a Guadalajara, pickup el jueves, total $8,500 MXN.
 
     ReportIncidentRequest:
       type: object
@@ -1555,7 +1506,8 @@ components:
           type: string
         type:
           type: string
-          enum: [TRUCK_BREAKDOWN, DELAY, SCHEDULE_CHANGE, CARRIER_CANCELLATION, PRICE_CHANGE, OTHER]
+          description: Etiqueta amplia y libre. No se usa como código de negocio ni para decidir el flujo.
+          example: GENERAL
         description:
           type: string
         reportedBy:
@@ -1618,9 +1570,27 @@ components:
         status:
           type: string
           enum: [REQUESTED, DIALING_HUMAN, HUMAN_JOINED, RESOLVED, FAILED]
+        humanPhone:
+          type: [string, "null"]
+        twilioConferenceSid:
+          type: [string, "null"]
+        humanParticipantCallSid:
+          type: [string, "null"]
+        previousOperationStatus:
+          type: string
+        resolvedAt:
+          type: [string, "null"]
+          format: date-time
         createdAt:
           type: string
           format: date-time
+
+    ResolveEscalationRequest:
+      type: object
+      required: [resolutionSummary]
+      properties:
+        resolutionSummary:
+          type: string
 
     ConfirmExecutionEventRequest:
       type: object
@@ -1658,8 +1628,9 @@ components:
           type: [string, "null"]
         entityId:
           type: [string, "null"]
-        mandateVersion:
-          type: [integer, "null"]
+        mandateId:
+          type: [string, "null"]
+          example: man_01JABC123
         payload:
           type: object
           additionalProperties: true
@@ -1690,20 +1661,4 @@ components:
           type: string
           enum: [queued, initiated, ringing, in-progress, completed, busy, failed, no-answer, canceled]
         CallDuration:
-          type: [string, "null"]
-
-    TwilioRecordingWebhook:
-      type: object
-      required: [CallSid, RecordingSid, RecordingUrl, RecordingStatus]
-      properties:
-        CallSid:
-          type: string
-        RecordingSid:
-          type: string
-        RecordingUrl:
-          type: string
-          format: uri
-        RecordingStatus:
-          type: string
-        RecordingDuration:
           type: [string, "null"]
