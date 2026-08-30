@@ -6,4 +6,5 @@ export const carriersRouter = Router();
 
 carriersRouter.get("/", asyncHandler(carriersController.list));
 carriersRouter.post("/", asyncHandler(carriersController.create));
+carriersRouter.post("/:carrierId/activate", asyncHandler(carriersController.activate));
 carriersRouter.delete("/:carrierId", asyncHandler(carriersController.remove));

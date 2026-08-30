@@ -33,6 +33,16 @@ export class CarriersService {
       });
     }
   }
+
+  async activateCarrier(carrierId: string) {
+    const carrier = carrierRepository.activate(carrierId);
+    if (!carrier) {
+      throw new ApiError(404, "RESOURCE_NOT_FOUND", "El carrier no existe.", {
+        carrierId,
+      });
+    }
+    return toCarrierResponse(carrier);
+  }
 }
 
 export const carriersService = new CarriersService();

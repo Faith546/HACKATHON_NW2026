@@ -238,6 +238,24 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /carriers/{carrierId}/activate:
+    parameters:
+      - $ref: "#/components/parameters/CarrierId"
+    post:
+      tags: [Carriers]
+      operationId: activateCarrier
+      summary: Reactivar un carrier
+      description: Reactiva el mismo registro conservando su identidad, teléfono e historial.
+      responses:
+        "200":
+          description: Carrier reactivado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carrier"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /operations/{operationId}/campaigns:
     parameters:
       - $ref: "#/components/parameters/OperationId"

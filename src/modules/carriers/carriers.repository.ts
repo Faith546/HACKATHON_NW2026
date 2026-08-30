@@ -32,6 +32,17 @@ export class CarrierRepository {
         .get() ?? null
     );
   }
+
+  activate(carrierId: string) {
+    return (
+      db
+        .update(carriers)
+        .set({ active: true })
+        .where(eq(carriers.id, carrierId))
+        .returning()
+        .get() ?? null
+    );
+  }
 }
 
 export const carrierRepository = new CarrierRepository();

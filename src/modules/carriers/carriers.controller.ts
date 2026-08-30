@@ -27,6 +27,11 @@ export class CarriersController {
     await carriersService.deleteCarrier(carrierId);
     res.status(204).send();
   }
+
+  async activate(req: Request, res: Response) {
+    const carrierId = req.params.carrierId as string;
+    res.status(200).json(await carriersService.activateCarrier(carrierId));
+  }
 }
 
 export const carriersController = new CarriersController();
