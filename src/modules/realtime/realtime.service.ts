@@ -299,8 +299,7 @@ export class RealtimeService {
     const transcriptEvidence =
       name === "recordVerbalAgreement" ||
       name === "createOperation" ||
-      name === "confirmDelivery" ||
-      name === "requestEscalation"
+      name === "confirmDelivery"
         ? latestTranscriptEvidence(session)
         : name === "attachCommitmentEvidence"
           ? {
@@ -570,39 +569,15 @@ function assertExplicitVoiceAuthorization(
       !/\b(no se entreg\w*|no ha lleg\w*|aun no|todavia no|deberia|probablemente|tal vez|quiza|manana|va a llegar)\b/.test(
         text,
       );
-  } else if (name === "requestEscalation") {
-    const transferIntent =
-      /\b(transfier\w*|transfer\w*|pas\w*|comunica\w*|conecta\w*|escal\w*|deriva\w*)\b/.test(
-        text,
-      ) ||
-      /\b(hablar|contactar|consultar)\b.{0,30}\b(con|a)\b/.test(
-        text,
-      ) ||
-      /\b(humano|persona|alguien mas|otra persona|operador|supervisor|encargado|representante|asesor|agente|jefe)\b/.test(
-        text,
-      ) ||
-      /\b(si|claro|por favor|adelante|de acuerdo|esta bien|correcto|exacto|ok|okay|hazlo)\b/.test(
-        text,
-      );
-    const denied =
-      /\b(no|nunca)\b.{0,30}\b(transfier\w*|transfer\w*|comunica\w*|conecta\w*|pas\w*|escal\w*|deriva\w*|hablar|contactar)\b/.test(
-        text,
-      );
-    accepted = transferIntent && !denied;
   }
   if (!accepted) {
-    const transferRejected = name === "requestEscalation";
     const commitmentRejected = name === "recordVerbalAgreement";
     throw new ApiError(
       409,
-      transferRejected
-        ? "EXPLICIT_HUMAN_TRANSFER_REQUEST_REQUIRED"
-        : "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
-      transferRejected
-        ? "La última intervención del caller no solicita explícitamente una transferencia humana."
-        : commitmentRejected
-          ? "La última intervención humana rechazó o pospuso el acuerdo."
-          : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
+      "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
+      commitmentRejected
+        ? "La última intervención humana rechazó o pospuso el acuerdo."
+        : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
       { tool: name },
     );
   }
