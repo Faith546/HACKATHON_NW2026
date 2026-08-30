@@ -299,7 +299,8 @@ export class RealtimeService {
     const transcriptEvidence =
       name === "recordVerbalAgreement" ||
       name === "createOperation" ||
-      name === "confirmDelivery"
+      name === "confirmDelivery" ||
+      name === "requestEscalation"
         ? latestTranscriptEvidence(session)
         : name === "attachCommitmentEvidence"
           ? {
@@ -520,6 +521,7 @@ function latestTranscriptEvidence(session: RealtimeSession): {
     .filter(
       (candidate) =>
         candidate.speaker === "HUMAN" &&
+        candidate.source === "CALLER_AUDIO" &&
         candidate.final &&
         !candidate.interrupted &&
         candidate.text.trim() !== "",
@@ -571,12 +573,33 @@ function assertExplicitVoiceAuthorization(
       !/\b(no se entreg\w*|no ha lleg\w*|aun no|todavia no|deberia|probablemente|tal vez|quiza|manana|va a llegar)\b/.test(
         text,
       );
+  } else if (name === "requestEscalation") {
+    const transferIntent =
+      /\b(transfiereme|transfieranme|transferirme|transfereme|pasame|pasenme|pasarme|comunicame|comuniquenme|comunicarme)\b/.test(
+        text,
+      ) ||
+      /\b(puedes|podrias|quiero|necesito|quisiera)\b.{0,25}\b(transferir|pasar|comunicar)\b/.test(
+        text,
+      ) ||
+      /\b(quiero|necesito|puedo|podria|quisiera|me gustaria) hablar con\b.{0,40}\b(persona|humano|operador|supervisor|encargado|representante|asesor)\b/.test(
+        text,
+      );
+    const denied =
+      /\b(no|nunca)\b.{0,30}\b(transfier\w*|transfer\w*|comunica\w*|pas\w*|hablar con)\b/.test(
+        text,
+      );
+    accepted = transferIntent && !denied;
   }
   if (!accepted) {
+    const transferRejected = name === "requestEscalation";
     throw new ApiError(
       409,
-      "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
-      "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
+      transferRejected
+        ? "EXPLICIT_HUMAN_TRANSFER_REQUEST_REQUIRED"
+        : "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
+      transferRejected
+        ? "La última intervención del caller no solicita explícitamente una transferencia humana."
+        : "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
       { tool: name },
     );
   }

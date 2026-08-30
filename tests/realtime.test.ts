@@ -13,6 +13,119 @@ import { InMemoryJobQueue } from "../src/shared/queue/in-memory-job-queue";
 import { ApiError } from "../src/shared/http/api-error";
 
 describe("RealtimeService", () => {
+  it("transfers only the call whose carrier explicitly requests a human", async () => {
+    const queue = new InMemoryJobQueue();
+    let nextCall = 0;
+    const calls = new CallsService({
+      repository: new InMemoryCallRepository(),
+      queue,
+      contextResolver: { resolve: async () => ({ toNumber: "+525500000001" }) },
+      telephonyGateway: {
+        startOutboundCall: async ({ callId }) => ({ providerCallId: `CA_${callId}` }),
+      },
+      createId: () => `call_${++nextCall}`,
+    });
+    for (const suffix of ["a", "b", "c"]) {
+      await calls.enqueueOutbound({
+        operationId: "op_1",
+        carrierId: `car_${suffix}`,
+        negotiationId: `neg_${suffix}`,
+        purpose: "QUOTE",
+      });
+    }
+    await queue.onIdle();
+
+    const transferredCalls: string[] = [];
+    const realtime = new RealtimeService({
+      repository: new InMemoryRealtimeSessionRepository(),
+      callsService: calls,
+      voiceCore: {
+        resolveOutboundCallContext: async () => ({ toNumber: "+525500000001" }),
+        resolveInboundCallContext: async () => ({
+          operationId: "op_1",
+          carrierId: "car_a",
+          negotiationId: "neg_a",
+          actorType: "CARRIER",
+          purpose: "QUOTE",
+        }),
+        getActiveMandate: async () => null,
+        executeVoiceTool: async ({ name, context }) => {
+          if (name === "requestEscalation") transferredCalls.push(context.callId);
+          return { ok: true };
+        },
+      },
+      createId: (() => {
+        let nextSession = 0;
+        return () => `rts_${++nextSession}`;
+      })(),
+    });
+    const sessions = await Promise.all(
+      ["a", "b", "c"].map((suffix, index) =>
+        realtime.create({
+          callId: `call_${index + 1}`,
+          carrierId: `car_${suffix}`,
+          negotiationId: `neg_${suffix}`,
+          actorType: "CARRIER",
+          mode: "QUOTE",
+        }),
+      ),
+    );
+    const callerTurns = [
+      "La tarifa es nueve mil pesos.",
+      "Pásame con Luis, por favor.",
+      "No me transfieras, podemos seguir negociando.",
+    ];
+    await Promise.all(
+      sessions.map((session, index) =>
+        realtime.appendTranscriptSegment(session.id, {
+          id: `turn_${index + 1}`,
+          speaker: "HUMAN",
+          source: "CALLER_AUDIO",
+          startMs: 100,
+          endMs: 900,
+          text: callerTurns[index]!,
+          final: true,
+          interrupted: false,
+        }),
+      ),
+    );
+    await realtime.appendTranscriptSegment(sessions[0]!.id, {
+      id: "programmatic_transfer",
+      speaker: "HUMAN",
+      source: "PROGRAMMATIC_TEXT",
+      startMs: 1_000,
+      endMs: 1_100,
+      text: "Pásame con Luis.",
+      final: true,
+      interrupted: false,
+    });
+
+    await assert.rejects(
+      () => realtime.executeTool(sessions[0]!.id, "requestEscalation", {
+        reason: "HUMAN_REQUESTED",
+        contextSummary: "Solicitó transferencia.",
+      }),
+      (error: unknown) =>
+        error instanceof ApiError &&
+        error.code === "EXPLICIT_HUMAN_TRANSFER_REQUEST_REQUIRED",
+    );
+    await realtime.executeTool(sessions[1]!.id, "requestEscalation", {
+      reason: "HUMAN_REQUESTED",
+      contextSummary: "Pidió hablar con Luis.",
+    });
+    await assert.rejects(
+      () => realtime.executeTool(sessions[2]!.id, "requestEscalation", {
+        reason: "HUMAN_REQUESTED",
+        contextSummary: "Solicitó transferencia.",
+      }),
+      (error: unknown) =>
+        error instanceof ApiError &&
+        error.code === "EXPLICIT_HUMAN_TRANSFER_REQUEST_REQUIRED",
+    );
+
+    assert.deepEqual(transferredCalls, ["call_2"]);
+  });
+
   it("limits tools by mode and persists the transcript when closed", async () => {
     const queue = new InMemoryJobQueue();
     const calls = new CallsService({
