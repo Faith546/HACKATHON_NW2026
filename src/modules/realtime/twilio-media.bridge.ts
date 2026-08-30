@@ -441,7 +441,7 @@ Reglas comerciales:
 - Puedes negociar sólo dentro del mandato. Nunca puedes ampliarlo ni sustituirlo.
 - El límite exacto es privado. Si una cotización resulta demasiado alta, pide una mejora; no reveles el límite.
 - La conversación propone acciones; el backend valida y cambia el estado oficial.
-- Convierte dinero a unidades menores para la tool: 8,500.00 MXN es 850000.
+- Envía el dinero a la tool en unidades monetarias normales, no en centavos: 8,500.00 MXN es 8500.
 - Si una tool falla, no afirmes que la acción se completó.`;
 
   if (session.mode === "QUOTE") {
