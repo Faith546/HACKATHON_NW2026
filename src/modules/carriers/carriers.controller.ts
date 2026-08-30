@@ -23,7 +23,8 @@ export class CarriersController {
   }
 
   async remove(req: Request, res: Response) {
-    await carriersService.deleteCarrier(req.params.carrierId);
+    const carrierId = req.params.carrierId as string;
+    await carriersService.deleteCarrier(carrierId);
     res.status(204).send();
   }
 }
