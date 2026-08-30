@@ -122,6 +122,7 @@ describe("IntegrationService facade", () => {
           operationId: "op_demo",
           carrierId: "car_demo",
           negotiationId: null,
+          actorType: "CARRIER",
           mandateId: null,
         },
         arguments: {

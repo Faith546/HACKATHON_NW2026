@@ -93,6 +93,49 @@ export class OperationsService {
     return toOperationResponse(result.operation, result.mandate);
   }
 
+  async resolveOperationReference(input: {
+    operationId?: string;
+    containerNumber?: string;
+  }) {
+    const operationId = input.operationId?.trim();
+    const containerNumber = input.containerNumber?.trim();
+    if (!operationId && !containerNumber) {
+      throw new ApiError(
+        422,
+        "OPERATION_REFERENCE_REQUIRED",
+        "Se requiere operationId o containerNumber para resolver la operación.",
+      );
+    }
+    const byId = operationId
+      ? operationsRepository.findOperationById(operationId)
+      : null;
+    const byContainer = containerNumber
+      ? operationsRepository.findOperationByContainerNumber(containerNumber)
+      : null;
+    if (operationId && !byId) {
+      throw new ApiError(404, "RESOURCE_NOT_FOUND", "Operación no encontrada.", {
+        operationId,
+      });
+    }
+    if (containerNumber && !byContainer) {
+      throw new ApiError(404, "RESOURCE_NOT_FOUND", "Operación no encontrada.", {
+        containerNumber,
+      });
+    }
+    if (byId && byContainer && byId.operation.id !== byContainer.operation.id) {
+      throw new ApiError(
+        409,
+        "OPERATION_REFERENCE_CONFLICT",
+        "operationId y containerNumber corresponden a operaciones distintas.",
+      );
+    }
+    const result = byId ?? byContainer;
+    if (!result) {
+      throw new ApiError(404, "RESOURCE_NOT_FOUND", "Operación no encontrada.");
+    }
+    return toOperationResponse(result.operation, result.mandate);
+  }
+
   async getOperationStatus(operationId: string) {
     const result = operationsRepository.getStatus(operationId);
     if (!result) {

@@ -1,6 +1,7 @@
 import type { VoiceToolName } from "../voice/voice-core.port";
 
 export const realtimeActorTypes = [
+  "INTERNAL_OPERATOR",
   "CARRIER",
   "DISPATCHER",
   "DRIVER",
@@ -8,6 +9,7 @@ export const realtimeActorTypes = [
 export type RealtimeActorType = (typeof realtimeActorTypes)[number];
 
 export const realtimeModes = [
+  "OPERATIONS",
   "QUOTE",
   "COMMIT",
   "EXECUTION",
@@ -15,7 +17,7 @@ export const realtimeModes = [
   "DELIVERY",
 ] as const;
 export type RealtimeMode = (typeof realtimeModes)[number];
-export type RealtimeAgentType = "LOGISTICS_AGENT";
+export type RealtimeAgentType = "OPERATIONS_AGENT" | "LOGISTICS_AGENT";
 export type RealtimeSessionStatus = "ACTIVE" | "CLOSED";
 
 export interface CreateRealtimeSessionInput {
@@ -40,9 +42,10 @@ export interface TranscriptSegment {
 export interface RealtimeSession {
   id: string;
   callId: string;
-  operationId: string;
+  operationId: string | null;
   carrierId: string | null;
   negotiationId: string | null;
+  actorType: RealtimeActorType;
   agent: RealtimeAgentType;
   mode: RealtimeMode;
   mandateId: string | null;
@@ -56,6 +59,8 @@ export interface RealtimeSession {
 export interface RealtimeSessionResponse {
   id: string;
   callId: string;
+  operationId: string | null;
+  actorType: RealtimeActorType;
   agent: RealtimeAgentType;
   mode: RealtimeMode;
   mandateId: string | null;
@@ -69,6 +74,8 @@ export function toRealtimeSessionResponse(
   return {
     id: session.id,
     callId: session.callId,
+    operationId: session.operationId,
+    actorType: session.actorType,
     agent: session.agent,
     mode: session.mode,
     mandateId: session.mandateId,

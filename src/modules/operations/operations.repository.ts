@@ -129,6 +129,17 @@ export class OperationsRepository {
     return { operation, mandate };
   }
 
+  findOperationByContainerNumber(containerNumber: string) {
+    const operation = db
+      .select()
+      .from(operations)
+      .where(eq(operations.containerNumber, containerNumber))
+      .get();
+    if (!operation) return null;
+    const mandate = this.findActiveMandate(operation.id);
+    return { operation, mandate };
+  }
+
   findOperations(status?: OperationStatus) {
     const query = db
       .select({ operation: operations, mandate: mandates })

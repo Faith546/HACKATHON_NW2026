@@ -2,7 +2,13 @@ import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { calls as callsTable } from "../../db/schema";
 import type * as databaseSchema from "../../db/schema";
-import type { Call, CallBrief, CallStatus } from "./calls.types";
+import type {
+  Call,
+  CallActorType,
+  CallBrief,
+  CallPurpose,
+  CallStatus,
+} from "./calls.types";
 
 export interface CallStatusTransition {
   expectedStatus: CallStatus;
@@ -20,7 +26,19 @@ export interface CallRepository {
   insert(call: Call): Promise<void>;
   findById(callId: string): Promise<Call | null>;
   findByProviderCallId(providerCallId: string): Promise<Call | null>;
+  findByOperationPurpose(
+    operationId: string,
+    purpose: CallPurpose,
+  ): Promise<Call | null>;
   setProviderCallId(callId: string, providerCallId: string): Promise<Call>;
+  bindContext(
+    callId: string,
+    input: {
+      operationId: string;
+      purpose?: CallPurpose;
+      actorType?: CallActorType;
+    },
+  ): Promise<Call>;
   setRealtimeSessionId(callId: string, sessionId: string | null): Promise<Call>;
   saveTranscript(callId: string, transcript: string): Promise<Call>;
   setStatus(
@@ -61,11 +79,34 @@ export class InMemoryCallRepository implements CallRepository {
     return null;
   }
 
+  async findByOperationPurpose(
+    operationId: string,
+    purpose: CallPurpose,
+  ): Promise<Call | null> {
+    for (const call of this.callsById.values()) {
+      if (call.operationId === operationId && call.purpose === purpose) {
+        return cloneCall(call);
+      }
+    }
+    return null;
+  }
+
   async setProviderCallId(
     callId: string,
     providerCallId: string,
   ): Promise<Call> {
     return this.update(callId, { twilioCallSid: providerCallId });
+  }
+
+  async bindContext(
+    callId: string,
+    input: {
+      operationId: string;
+      purpose?: CallPurpose;
+      actorType?: CallActorType;
+    },
+  ): Promise<Call> {
+    return this.update(callId, input);
   }
 
   async setRealtimeSessionId(
@@ -161,6 +202,7 @@ function toCall(row: CallRow): Call {
     operationId: row.operationId,
     carrierId: row.carrierId,
     negotiationId: row.negotiationId,
+    actorType: row.actorType as CallActorType,
     twilioCallSid: row.twilioCallSid,
     realtimeSessionId: row.realtimeSessionId,
     direction: row.direction as Call["direction"],
@@ -185,6 +227,7 @@ export class DrizzleCallRepository implements CallRepository {
       operationId: call.operationId,
       carrierId: call.carrierId,
       negotiationId: call.negotiationId,
+      actorType: call.actorType,
       twilioCallSid: call.twilioCallSid,
       realtimeSessionId: call.realtimeSessionId,
       direction: call.direction,
@@ -218,11 +261,41 @@ export class DrizzleCallRepository implements CallRepository {
     return row ? toCall(row) : null;
   }
 
+  async findByOperationPurpose(
+    operationId: string,
+    purpose: CallPurpose,
+  ): Promise<Call | null> {
+    const row = this.database
+      .select()
+      .from(callsTable)
+      .where(
+        and(
+          eq(callsTable.operationId, operationId),
+          eq(callsTable.purpose, purpose),
+        ),
+      )
+      .orderBy(callsTable.createdAt)
+      .limit(1)
+      .get();
+    return row ? toCall(row) : null;
+  }
+
   async setProviderCallId(
     callId: string,
     providerCallId: string,
   ): Promise<Call> {
     return this.update(callId, { twilioCallSid: providerCallId });
+  }
+
+  async bindContext(
+    callId: string,
+    input: {
+      operationId: string;
+      purpose?: CallPurpose;
+      actorType?: CallActorType;
+    },
+  ): Promise<Call> {
+    return this.update(callId, input);
   }
 
   async setRealtimeSessionId(

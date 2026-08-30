@@ -39,6 +39,7 @@ describe("RealtimeService", () => {
         operationId: "op_1",
         carrierId: "car_1",
         negotiationId: "neg_1",
+        actorType: "CARRIER",
         purpose: "QUOTE",
       }),
       getActiveMandate: async () => ({
@@ -120,6 +121,7 @@ describe("RealtimeService", () => {
     assert.equal(call.realtimeSessionId, null);
 
     assert.equal(realtimeModes.includes("CREATE_OPERATION" as never), false);
-    assert.equal(realtimeActorTypes.includes("INTERNAL_OPERATOR" as never), false);
+    assert.equal(realtimeModes.includes("OPERATIONS"), true);
+    assert.equal(realtimeActorTypes.includes("INTERNAL_OPERATOR"), true);
   });
 });

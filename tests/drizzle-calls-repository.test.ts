@@ -13,9 +13,10 @@ function createDatabase() {
   sqlite.exec(`
     CREATE TABLE calls (
       id TEXT PRIMARY KEY,
-      operation_id TEXT NOT NULL,
+      operation_id TEXT,
       carrier_id TEXT,
       negotiation_id TEXT,
+      actor_type TEXT NOT NULL DEFAULT 'CARRIER',
       twilio_call_sid TEXT UNIQUE,
       realtime_session_id TEXT,
       direction TEXT NOT NULL,
@@ -55,6 +56,7 @@ describe("DrizzleCallRepository", () => {
       operationId: "op_db",
       carrierId: "car_db",
       negotiationId: "neg_db",
+      actorType: "CARRIER",
       twilioCallSid: null,
       realtimeSessionId: null,
       direction: "OUTBOUND",

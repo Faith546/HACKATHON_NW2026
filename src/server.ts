@@ -21,23 +21,33 @@ import { ApiError } from "./shared/http/api-error";
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "127.0.0.1";
 const runtimeMode = validateRuntimeConfiguration();
+const authorizedOperatorPhones = parseAuthorizedOperatorPhones();
 const commitmentsService = createCommitmentsService({
   summarySender: configuredSummarySender(runtimeMode),
 });
 let integrationFacade: IntegrationService | null = null;
-const voiceCore = new DrizzleVoiceCoreAdapter(db, async (input) => {
-  if (!integrationFacade) {
-    throw new ApiError(
-      503,
-      "VOICE_CORE_UNAVAILABLE",
-      "El facade de integración aún no está listo.",
-    );
-  }
-  return integrationFacade.executeVoiceTool(input);
-});
+const voiceCore = new DrizzleVoiceCoreAdapter(
+  db,
+  async (input) => {
+    if (!integrationFacade) {
+      throw new ApiError(
+        503,
+        "VOICE_CORE_UNAVAILABLE",
+        "El facade de integración aún no está listo.",
+      );
+    }
+    return integrationFacade.executeVoiceTool(input);
+  },
+  { authorizedOperatorPhones },
+);
 const voiceRuntime = createDrizzleVoiceRuntime(db, {
   voiceCore,
-  lifecycleObserver: createCampaignCallLifecycleObserver(),
+  lifecycleObserver: createCampaignCallLifecycleObserver(
+    undefined,
+    async (operationId) => {
+      await integrationFacade?.advanceAutonomousFlow(operationId);
+    },
+  ),
 });
 integrationFacade = createIntegrationService({
   commitmentsService,
@@ -48,6 +58,7 @@ const app = createApp({
   core: { commitmentsService },
   voice: { runtime: voiceRuntime },
 });
+await integrationFacade.recoverAutonomousFlows();
 const server = createServer(app);
 
 if (runtimeMode === "twilio") {
@@ -116,6 +127,7 @@ function validateRuntimeConfiguration(): "local" | "twilio" {
     "OPENAI_API_KEY",
     "PUBLIC_BASE_URL",
     "PUBLIC_WSS_URL",
+    "AUTHORIZED_OPERATOR_PHONES",
   ] as const;
   const missing = required.filter(
     (name) => !process.env[name]?.trim(),
@@ -137,7 +149,25 @@ function validateRuntimeConfiguration(): "local" | "twilio" {
   if (escalationPhone && !/^\+[1-9]\d{7,14}$/.test(escalationPhone)) {
     throw new Error("HUMAN_ESCALATION_PHONE debe usar formato E.164.");
   }
+  parseAuthorizedOperatorPhones();
   return mode;
+}
+
+function parseAuthorizedOperatorPhones(): string[] {
+  const phones = (process.env.AUTHORIZED_OPERATOR_PHONES ?? "")
+    .split(",")
+    .map((phone) => phone.trim())
+    .filter(Boolean);
+  const invalid = phones.filter((phone) => !/^\+[1-9]\d{7,14}$/.test(phone));
+  if (invalid.length > 0) {
+    throw new Error(
+      "AUTHORIZED_OPERATOR_PHONES debe contener números E.164 separados por coma.",
+    );
+  }
+  if (new Set(phones).size !== phones.length) {
+    throw new Error("AUTHORIZED_OPERATOR_PHONES no puede contener duplicados.");
+  }
+  return phones;
 }
 
 function requiredEnvironment(name: string): string {

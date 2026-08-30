@@ -1,4 +1,5 @@
 import type {
+  CallActorType,
   CallPurpose,
   EnqueueOutboundCallInput,
 } from "../calls/calls.types";
@@ -14,9 +15,10 @@ export interface VoiceMandateSnapshot {
 }
 
 export interface InboundCallResolution {
-  operationId: string;
+  operationId: string | null;
   carrierId: string | null;
   negotiationId: string | null;
+  actorType: CallActorType;
   purpose: CallPurpose;
 }
 
@@ -49,9 +51,10 @@ export type VoiceToolName = (typeof voiceToolNames)[number];
 
 export interface VoiceToolContext {
   callId: string;
-  operationId: string;
+  operationId: string | null;
   carrierId: string | null;
   negotiationId: string | null;
+  actorType: CallActorType;
   mandateId: string | null;
   transcriptEvidence?: {
     startMs: number;

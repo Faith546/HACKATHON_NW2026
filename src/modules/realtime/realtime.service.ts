@@ -18,6 +18,13 @@ import {
 } from "./realtime.types";
 
 const toolsByMode: Record<RealtimeMode, VoiceToolName[]> = {
+  OPERATIONS: [
+    "createOperation",
+    "getOperationStatus",
+    "listCarriers",
+    "startCampaign",
+    "saveCallBrief",
+  ],
   QUOTE: [
     "getOperation",
     "getActiveMandate",
@@ -48,6 +55,7 @@ const toolsByMode: Record<RealtimeMode, VoiceToolName[]> = {
     "getActiveMandate",
     "confirmPickup",
     "reportIncident",
+    "evaluateIncidentChange",
     "requestEscalation",
     "saveCallBrief",
   ],
@@ -115,7 +123,18 @@ export class RealtimeService {
       input.negotiationId,
       call.negotiationId,
     );
-    const agent: RealtimeAgentType = "LOGISTICS_AGENT";
+    const agent: RealtimeAgentType =
+      call.actorType === "INTERNAL_OPERATOR"
+        ? "OPERATIONS_AGENT"
+        : "LOGISTICS_AGENT";
+    if (input.actorType !== call.actorType) {
+      throw new ApiError(
+        422,
+        "REALTIME_ACTOR_MISMATCH",
+        "El actor Realtime no corresponde a la identidad validada de la llamada.",
+        { requested: input.actorType, actual: call.actorType },
+      );
+    }
     if (input.mode !== modeForCallPurpose(call.purpose)) {
       throw new ApiError(
         422,
@@ -157,15 +176,16 @@ export class RealtimeService {
       return existing;
     }
 
-    const mandate = await this.dependencies.voiceCore.getActiveMandate(
-      call.operationId,
-    );
+    const mandate = call.operationId
+      ? await this.dependencies.voiceCore.getActiveMandate(call.operationId)
+      : null;
     const session: RealtimeSession = {
       id: this.createId(),
       callId: call.id,
       operationId: call.operationId,
       carrierId: call.carrierId,
       negotiationId: call.negotiationId,
+      actorType: call.actorType,
       agent,
       mode: input.mode,
       mandateId: mandate?.id ?? null,
@@ -177,16 +197,18 @@ export class RealtimeService {
     };
     await this.dependencies.repository.insert(session);
     await this.dependencies.callsService.linkRealtimeSession(call.id, session.id);
-    await this.dependencies.auditWriter?.record({
-      operationId: call.operationId,
-      eventType: "REALTIME_SESSION_CREATED",
-      actorType: agent,
-      callId: call.id,
-      entityType: "REALTIME_SESSION",
-      entityId: session.id,
-      mandateId: session.mandateId,
-      payload: { mode: session.mode, allowedTools: session.allowedTools },
-    });
+    if (call.operationId) {
+      await this.dependencies.auditWriter?.record({
+        operationId: call.operationId,
+        eventType: "REALTIME_SESSION_CREATED",
+        actorType: agent,
+        callId: call.id,
+        entityType: "REALTIME_SESSION",
+        entityId: session.id,
+        mandateId: session.mandateId,
+        payload: { mode: session.mode, allowedTools: session.allowedTools },
+      });
+    }
     return session;
   }
 
@@ -247,7 +269,9 @@ export class RealtimeService {
         ? deriveTranscriptEvidence(session, parsedArguments)
         : parsedArguments;
     const transcriptEvidence =
-      name === "recordVerbalAgreement"
+      name === "recordVerbalAgreement" ||
+      name === "createOperation" ||
+      name === "confirmDelivery"
         ? latestTranscriptEvidence(session)
         : name === "attachCommitmentEvidence"
           ? {
@@ -257,6 +281,9 @@ export class RealtimeService {
                 trustedArguments.transcriptExcerpt as string,
             }
           : undefined;
+    if (transcriptEvidence) {
+      assertExplicitVoiceAuthorization(name, transcriptEvidence);
+    }
     const execute = () =>
       this.dependencies.voiceCore.executeVoiceTool({
         name,
@@ -265,12 +292,17 @@ export class RealtimeService {
           operationId: session.operationId,
           carrierId: session.carrierId,
           negotiationId: session.negotiationId,
+          actorType: session.actorType,
           mandateId: session.mandateId,
           ...(transcriptEvidence ? { transcriptEvidence } : {}),
         },
         arguments: trustedArguments,
       });
-    if (!mutatingVoiceTools.has(name)) return execute();
+    if (!mutatingVoiceTools.has(name)) {
+      const result = await execute();
+      await this.synchronizeOperatorContext(session, name, result);
+      return result;
+    }
 
     const key = `${name}:${stableJson(trustedArguments)}`;
     const executions =
@@ -281,7 +313,9 @@ export class RealtimeService {
     const execution = execute();
     executions.set(key, execution);
     try {
-      return await execution;
+      const result = await execution;
+      await this.synchronizeOperatorContext(session, name, result);
+      return result;
     } catch (error) {
       if (executions.get(key) === execution) executions.delete(key);
       throw error;
@@ -337,16 +371,18 @@ export class RealtimeService {
       );
     }
     await this.dependencies.callsService.linkRealtimeSession(session.callId, null);
-    await this.dependencies.auditWriter?.record({
-      operationId: session.operationId,
-      eventType: "REALTIME_SESSION_CLOSED",
-      actorType: session.agent,
-      callId: session.callId,
-      entityType: "REALTIME_SESSION",
-      entityId: session.id,
-      mandateId: session.mandateId,
-      payload: { transcriptSegments: session.transcriptSegments.length },
-    });
+    if (session.operationId) {
+      await this.dependencies.auditWriter?.record({
+        operationId: session.operationId,
+        eventType: "REALTIME_SESSION_CLOSED",
+        actorType: session.agent,
+        callId: session.callId,
+        entityType: "REALTIME_SESSION",
+        entityId: session.id,
+        mandateId: session.mandateId,
+        payload: { transcriptSegments: session.transcriptSegments.length },
+      });
+    }
     await this.dependencies.repository.delete(session.id);
     this.toolExecutionsBySession.delete(session.id);
     if (connectionCloseError) throw connectionCloseError;
@@ -363,6 +399,31 @@ export class RealtimeService {
       );
     }
     return session;
+  }
+
+  private async synchronizeOperatorContext(
+    session: RealtimeSession,
+    name: VoiceToolName,
+    _result: unknown,
+  ): Promise<void> {
+    if (
+      session.actorType !== "INTERNAL_OPERATOR" ||
+      (name !== "createOperation" && name !== "getOperationStatus")
+    ) {
+      return;
+    }
+    const call = await this.dependencies.callsService.getById(session.callId);
+    if (!call.operationId) return;
+    session.operationId = call.operationId;
+    const mandate = await this.dependencies.voiceCore.getActiveMandate(
+      call.operationId,
+    );
+    session.mandateId = mandate?.id ?? null;
+    if (call.purpose === "DELIVERY") {
+      session.mode = "DELIVERY";
+      session.allowedTools = [...toolsByMode.DELIVERY];
+    }
+    await this.dependencies.repository.save(session);
   }
 
   private assertMatchingContext(
@@ -382,6 +443,7 @@ export class RealtimeService {
 }
 
 export function modeForCallPurpose(purpose: CallPurpose): RealtimeMode {
+  if (purpose === "OPERATIONS") return "OPERATIONS";
   if (purpose === "QUOTE" || purpose === "RENEGOTIATION") return "QUOTE";
   if (purpose === "COMMIT") return "COMMIT";
   if (purpose === "INCIDENT" || purpose === "ESCALATION") return "INCIDENT";
@@ -457,6 +519,36 @@ function normalizeTranscriptText(value: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .toLocaleLowerCase("es-MX");
+}
+
+function assertExplicitVoiceAuthorization(
+  name: VoiceToolName,
+  evidence: { transcriptExcerpt: string },
+): void {
+  const text = normalizeTranscriptText(evidence.transcriptExcerpt);
+  let accepted = true;
+  if (name === "createOperation") {
+    accepted =
+      /\b(confirmo|autorizo)\b/.test(text) &&
+      /\b(crea|crear|crees|operacion|mandato)\b/.test(text);
+  } else if (name === "recordVerbalAgreement") {
+    accepted =
+      /\b(si|confirmo|confirma|acepto|acepta)\b/.test(text) &&
+      !/\b(dejame|luego|despues|voy a confirmar)\b/.test(text);
+  } else if (name === "confirmDelivery") {
+    accepted =
+      /\b(confirmo|confirma)\b/.test(text) &&
+      /\b(entregado|entregada|entrego|entrega)\b/.test(text) &&
+      !/\b(deberia|probablemente|tal vez|quiza)\b/.test(text);
+  }
+  if (!accepted) {
+    throw new ApiError(
+      409,
+      "EXPLICIT_VOICE_CONFIRMATION_REQUIRED",
+      "La última intervención humana no contiene una confirmación inequívoca para esta acción.",
+      { tool: name },
+    );
+  }
 }
 
 function stableJson(value: unknown): string {
