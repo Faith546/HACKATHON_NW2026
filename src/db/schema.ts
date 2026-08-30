@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { desc, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import {
   check,
   index,
@@ -130,7 +130,7 @@ export const campaigns = sqliteTable(
     ),
     index("idx_campaigns_operation").on(
       table.operationId,
-      desc(table.createdAt),
+      table.createdAt,
     ),
   ],
 );
@@ -173,11 +173,12 @@ export const calls = sqliteTable(
   "calls",
   {
     id: text("id").primaryKey().$defaultFn(() => id("call")),
-    operationId: text("operation_id")
-      .notNull()
-      .references(() => operations.id, { onDelete: "cascade" }),
+    operationId: text("operation_id").references(() => operations.id, {
+      onDelete: "cascade",
+    }),
     carrierId: text("carrier_id").references(() => carriers.id),
     negotiationId: text("negotiation_id").references(() => negotiations.id),
+    actorType: text("actor_type").notNull().default("CARRIER"),
     twilioCallSid: text("twilio_call_sid"),
     realtimeSessionId: text("realtime_session_id"),
     direction: text("direction").notNull(),
@@ -198,6 +199,10 @@ export const calls = sqliteTable(
       sql`${table.direction} IN ('OUTBOUND', 'INBOUND')`,
     ),
     check(
+      "ck_calls_actor_type",
+      sql`${table.actorType} IN ('INTERNAL_OPERATOR', 'CARRIER', 'DISPATCHER', 'DRIVER')`,
+    ),
+    check(
       "ck_calls_purpose",
       sql`${table.purpose} IN ('OPERATIONS', 'QUOTE', 'COMMIT', 'EXECUTION', 'INCIDENT', 'DELIVERY', 'RENEGOTIATION', 'ESCALATION')`,
     ),
@@ -207,7 +212,7 @@ export const calls = sqliteTable(
     ),
     index("idx_calls_operation_created").on(
       table.operationId,
-      desc(table.createdAt),
+      table.createdAt,
     ),
     index("idx_calls_carrier_status").on(table.carrierId, table.status),
   ],

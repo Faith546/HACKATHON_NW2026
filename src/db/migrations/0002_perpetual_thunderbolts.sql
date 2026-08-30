@@ -1,4 +1,4 @@
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
+PRAGMA defer_foreign_keys=ON;--> statement-breakpoint
 CREATE TABLE `__new_campaigns` (
 	`id` text PRIMARY KEY NOT NULL,
 	`operation_id` text NOT NULL,
@@ -19,6 +19,5 @@ CREATE TABLE `__new_campaigns` (
 INSERT INTO `__new_campaigns`("id", "operation_id", "status", "requested_carriers", "max_parallel_calls", "strategy", "winning_quote_id", "created_at", "completed_at") SELECT "id", "operation_id", "status", "requested_carriers", "max_parallel_calls", "strategy", "winning_quote_id", "created_at", "completed_at" FROM `campaigns`;--> statement-breakpoint
 DROP TABLE `campaigns`;--> statement-breakpoint
 ALTER TABLE `__new_campaigns` RENAME TO `campaigns`;--> statement-breakpoint
-PRAGMA foreign_keys=ON;--> statement-breakpoint
-CREATE INDEX `idx_campaigns_operation` ON `campaigns` (`operation_id`,`"created_at" desc`);--> statement-breakpoint
+CREATE INDEX `idx_campaigns_operation` ON `campaigns` (`operation_id`,`created_at`);--> statement-breakpoint
 ALTER TABLE `operations` ADD `weight_kg` integer DEFAULT 10000 NOT NULL;
