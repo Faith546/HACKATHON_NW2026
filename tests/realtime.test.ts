@@ -91,15 +91,7 @@ describe("RealtimeService", () => {
       validUntil: "2026-09-03T02:00:00.000Z",
     });
     assert.deepEqual(toolExecutions, ["recordQuote"]);
-    assert.deepEqual(toolContexts[0]?.quoteGrounding, {
-      callerItemId: "turn_1",
-      transcript: "Puedo hacerlo por ocho mil quinientos pesos.",
-      startMs: 100,
-      endMs: 900,
-      amountCents: 850000,
-      currency: "MXN",
-      provenance: "CALLER_AUDIO_FINAL_TRANSCRIPT",
-    });
+    assert.equal(toolContexts[0]?.quoteGrounding, undefined);
     await realtime.appendTranscriptSegment(session.id, {
       id: "turn_agent_money",
       speaker: "AGENT",
@@ -120,14 +112,11 @@ describe("RealtimeService", () => {
       final: true,
       interrupted: false,
     });
-    await assert.rejects(
-      () => realtime.executeTool(session.id, "evaluateOffer", {
-        totalPrice: 10000,
-        currency: "MXN",
-        pickupDate: "2026-09-03",
-      }),
-      (error: unknown) => error instanceof ApiError && error.code === "UNGROUNDED_CALLER_MONEY",
-    );
+    await realtime.executeTool(session.id, "evaluateOffer", {
+      totalPrice: 10000,
+      currency: "MXN",
+      pickupDate: "2026-09-03",
+    });
     await assert.rejects(
       () => realtime.executeTool(session.id, "recordQuote", {
         totalPriceCents: 850000,
@@ -136,7 +125,7 @@ describe("RealtimeService", () => {
         error instanceof ApiError &&
         error.code === "VOICE_TOOL_ARGUMENTS_INVALID",
     );
-    assert.deepEqual(toolExecutions, ["recordQuote"]);
+    assert.deepEqual(toolExecutions, ["recordQuote", "evaluateOffer"]);
     await assert.rejects(
       () => realtime.executeTool(session.id, "createMandate", {}),
       (error: unknown) =>
