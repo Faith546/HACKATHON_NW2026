@@ -1,7 +1,7 @@
+import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { carriers } from "../../db/schema";
 import type { CreateCarrierInput } from "./carriers.types";
-import { eq } from "drizzle-orm";
 
 export class CarrierRepository {
   findAll() {
