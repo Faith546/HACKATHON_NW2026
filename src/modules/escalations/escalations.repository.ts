@@ -117,6 +117,14 @@ export class EscalationsRepository {
           { callId: call.id, status: call.status },
         );
       }
+      if (call.purpose === "QUOTE") {
+        throw new ApiError(
+          409,
+          "HUMAN_TRANSFER_UNAVAILABLE_DURING_QUOTE",
+          "La transferencia humana sólo está disponible después de seleccionar una oferta y pasar a confirmación.",
+          { callId: call.id, purpose: call.purpose },
+        );
+      }
       if (!call.twilioCallSid) {
         throw new ApiError(
           409,

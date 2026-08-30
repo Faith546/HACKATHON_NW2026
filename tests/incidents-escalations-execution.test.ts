@@ -35,6 +35,7 @@ import { IntegrationService } from "../src/modules/integration/integration.servi
 import { createExecutionService } from "../src/modules/execution/execution.service";
 import { createExecutionRouter } from "../src/modules/execution/execution.routes";
 import { errorHandler } from "../src/shared/http/error-handler";
+import { ApiError } from "../src/shared/http/api-error";
 import { InMemoryJobQueue } from "../src/shared/queue/in-memory-job-queue";
 import {
   createBusinessFlowDatabase,
@@ -243,7 +244,7 @@ describe("Incidents endpoints", () => {
 });
 
 describe("Escalations endpoints and Twilio conference gateway", () => {
-  it("auto-joins the configured human from an active quote call", async () => {
+  it("rejects human transfer during quote and allows it in confirmation", async () => {
     const { sqlite, database } = createBusinessFlowDatabase();
     seedOperation(database, { operationId: "op_quote_handoff", status: "SOURCING" });
     database.insert(carriers).values({
@@ -277,21 +278,33 @@ describe("Escalations endpoints and Twilio conference gateway", () => {
     });
 
     try {
-      const queued = await integration.executeVoiceTool({
-        name: "requestEscalation",
+      const toolInput = {
+        name: "requestEscalation" as const,
         context: {
           callId: "call_quote_handoff",
           operationId: "op_quote_handoff",
           carrierId: "car_quote_handoff",
           negotiationId: "neg_quote_handoff",
-          actorType: "CARRIER",
+          actorType: "CARRIER" as const,
           mandateId: null,
         },
         arguments: {
           reason: "HUMAN_REQUESTED",
           contextSummary: "El carrier pidió hablar con una persona.",
         },
-      }) as { status: string };
+      };
+      await assert.rejects(
+        () => integration.executeVoiceTool(toolInput),
+        (error: unknown) =>
+          error instanceof ApiError &&
+          error.code === "HUMAN_TRANSFER_UNAVAILABLE_DURING_QUOTE",
+      );
+      database
+        .update(calls)
+        .set({ purpose: "COMMIT" })
+        .where(eq(calls.id, "call_quote_handoff"))
+        .run();
+      const queued = await integration.executeVoiceTool(toolInput) as { status: string };
       assert.equal(queued.status, "DIALING_HUMAN");
       await queue.onIdle();
       assert.equal(
