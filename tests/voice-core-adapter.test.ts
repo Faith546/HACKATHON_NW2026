@@ -110,6 +110,28 @@ describe("DrizzleVoiceCoreAdapter", () => {
     }
   });
 
+  it("lets a no-answer carrier call back while sourcing remains open", async () => {
+    const { sqlite, adapter } = fixture();
+    try {
+      sqlite.prepare("UPDATE negotiations SET status = 'NO_ANSWER'").run();
+      assert.deepEqual(
+        await adapter.resolveInboundCallContext({
+          fromNumber: "+525500000001",
+          toNumber: "+525500000002",
+        }),
+        {
+          operationId: "op_1",
+          carrierId: "car_1",
+          negotiationId: "neg_1",
+          actorType: "CARRIER",
+          purpose: "QUOTE",
+        },
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("rejects a known carrier without an active operation context", async () => {
     const { sqlite, adapter } = fixture();
     try {

@@ -22,6 +22,10 @@ const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "127.0.0.1";
 const runtimeMode = validateRuntimeConfiguration();
 const authorizedOperatorPhones = parseAuthorizedOperatorPhones();
+const humanEscalationPhone =
+  process.env.HUMAN_ESCALATION_PHONE?.trim() ||
+  authorizedOperatorPhones[0] ||
+  null;
 const commitmentsService = createCommitmentsService({
   summarySender: configuredSummarySender(runtimeMode),
 });
@@ -53,10 +57,7 @@ integrationFacade = createIntegrationService({
   commitmentsService,
   callsService: voiceRuntime.callsService,
   inboundContextResolver: voiceCore,
-  humanEscalationPhone:
-    process.env.HUMAN_ESCALATION_PHONE?.trim() ||
-    authorizedOperatorPhones[0] ||
-    null,
+  humanEscalationPhone,
 });
 const app = createApp({
   core: { commitmentsService },
@@ -85,6 +86,9 @@ if (runtimeMode === "twilio") {
 
 server.listen(port, host, () => {
   process.stdout.write(`Voice runtime: ${runtimeMode}\n`);
+  process.stdout.write(
+    `Human handoff: ${humanEscalationPhone ? "configured" : "unavailable"}\n`,
+  );
   process.stdout.write(`API: http://${host}:${port}/api/v1\n`);
   process.stdout.write(`Swagger UI: http://${host}:${port}/docs\n`);
   process.stdout.write(`OpenAPI YAML: http://${host}:${port}/openapi.yaml\n`);
