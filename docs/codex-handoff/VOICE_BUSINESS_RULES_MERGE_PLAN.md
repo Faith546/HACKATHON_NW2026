@@ -2,7 +2,7 @@
 
 ## Estado verificado
 
-- Voice se integró de forma no destructiva con `origin/main` en `512291bda6693bd7073130f61d4d85414d66e113`.
+- Voice se integró de forma no destructiva con `origin/main` en `3d942a4a0e071473851e837425cdc236ba92b863`.
 - Business Rules permanece como la verdad de `main`; Voice conserva grounding, StreamSid, recording y timing.
 - No se debe ejecutar ninguna de estas migraciones sobre producción durante la reconciliación.
 
