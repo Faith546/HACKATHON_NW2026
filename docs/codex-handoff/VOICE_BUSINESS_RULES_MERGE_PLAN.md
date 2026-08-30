@@ -1,14 +1,14 @@
-# Voice + Business Rules merge plan
+# Voice + Business Rules merge reconciliation
 
 ## Estado verificado
 
-- Voice: `feat/voice-main-hardening` en `a10fcfb8fdebca8718fdf2bf437beef53a26ae54`, basada en `b6b0964`.
-- Business Rules ya llegó a `origin/main` en `63fd6390219aff4e00340e8638afc70af28a5c85` mediante `c7a14e1`.
+- Voice se integró de forma no destructiva con `origin/main` en `512291bda6693bd7073130f61d4d85414d66e113`.
+- Business Rules permanece como la verdad de `main`; Voice conserva grounding, StreamSid, recording y timing.
 - No se debe ejecutar ninguna de estas migraciones sobre producción durante la reconciliación.
 
-## Qué agrega cada migration 0002
+## Qué aportaba cada frente
 
-Voice, `0002_round_pestilence.sql`:
+Voice, antes de reconciliar `0002_round_pestilence.sql` y ahora `0003_silent_chronomancer.sql`:
 
 - crea `call_timing_events` y su índice por call/created_at;
 - agrega a `calls`: `twilio_stream_sid`, `recording_sid`, `recording_status`, `recording_url` y `recording_duration_seconds`;
@@ -22,9 +22,9 @@ Business Rules, `0002_perpetual_thunderbolts.sql`:
 
 Las migraciones SQL no modifican las mismas tablas: Voice toca `calls`, `quotes` y una tabla nueva; Business Rules toca `campaigns` y `operations`. El conflicto es de numeración/metadata Drizzle y de archivos TypeScript compartidos, no de columnas equivalentes.
 
-## Conflictos probables
+## Conflictos resueltos
 
-Confirmados por comparación de ambos lados desde `b6b0964`:
+Confirmados y resueltos al integrar ambos lados desde `b6b0964`:
 
 - `src/db/migrations/meta/0002_snapshot.json` — agregado distinto en ambos lados;
 - `src/db/migrations/meta/_journal.json` — ambos registran un índice 2 diferente;
@@ -32,16 +32,17 @@ Confirmados por comparación de ambos lados desde `b6b0964`:
 - `src/modules/market/market.repository.ts` — ranking por peso/precio más persistencia de provenance;
 - `src/modules/market/market.types.ts` — nueva estrategia más tipos/respuesta de grounding.
 
-No hay que elegir un lado completo: ambos cambios son ortogonales y deben conservarse.
+No se eligió un lado completo: se conservaron ambas conductas.
 
-## Reconciliación correcta
+## Reconciliación ejecutada
 
-1. Crear una branch de integración desde el `origin/main` vigente; no hacerlo sobre producción.
-2. Aplicar los commits Voice y resolver los cinco archivos compartidos conservando ambas conductas.
-3. Mantener intactos `0002_perpetual_thunderbolts.sql`, su entrada de journal y su snapshot, porque ya pertenecen a `main`.
-4. Retirar del resultado integrado únicamente la identidad Drizzle `0002` de Voice y regenerar sus cambios de schema contra el `main` actual con `npm run db:generate`; el resultado debe ser una migración Voice posterior, normalmente `0003`.
-5. Verificar que el schema combinado contiene `weightKg`, `BEST_WEIGHT_PRICE_RATIO`, columnas Voice, `call_timing_events` y grounding de quote.
-6. Probar dos caminos en SQLite desechable: base vacía `0000→0001→0002 Business→0003 Voice`, y copia no productiva ya migrada hasta `0002 Business→0003 Voice`.
-7. Ejecutar typecheck, todos los tests, OpenAPI/parity y `git diff --check` antes de considerar merge.
+1. Se hizo merge de `origin/main` dentro de `feat/voice-main-hardening`; no se modificó `main`.
+2. Se conservaron los cambios TypeScript de ambos frentes.
+3. `0002_perpetual_thunderbolts.sql`, su journal y snapshot permanecen como la migración Business Rules.
+4. La identidad anterior `0002` de Voice se retiró y Drizzle generó `0003_silent_chronomancer.sql` con snapshot y journal coherentes.
+5. Se corrigió únicamente la sintaxis inválida del índice descendente de `0002`; no se cambió su regla de negocio.
+6. El schema combinado contiene `weightKg`, `BEST_WEIGHT_PRICE_RATIO`, columnas Voice, `call_timing_events` y grounding de quote.
+7. Se validaron dos caminos en SQLite desechable: base vacía `0000→0001→0002 Business→0003 Voice`, y base existente hasta `0002 Business→0003 Voice`.
+8. Typecheck, todos los tests, OpenAPI/parity y `git diff --check` deben permanecer verdes antes del merge a `main`.
 
-No renombrar archivos a mano sin regenerar snapshot/journal; no editar la DB productiva; no resolver este conflicto dentro de `feat/voice-main-hardening`.
+No renombrar migraciones a mano sin regenerar snapshot/journal y no editar la DB productiva.
