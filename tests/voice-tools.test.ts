@@ -36,4 +36,31 @@ describe("voice tool schemas", () => {
 
     assert.equal(parsed.currency, "MXN");
   });
+
+  it("requires weight when Voice creates an operation", () => {
+    const operation = {
+      customerName: "Textiles Pacífico",
+      containerNumber: "TCLU-WEIGHT",
+      origin: "Manzanillo",
+      destination: "Guadalajara",
+      service: "DRAYAGE" as const,
+      mandate: {
+        maxTotalPrice: 9000,
+        currency: "MXN",
+        pickupDate: "2026-09-03",
+      },
+    };
+
+    assert.equal(
+      voiceToolParameterSchemas.createOperation.safeParse(operation).success,
+      false,
+    );
+    assert.equal(
+      voiceToolParameterSchemas.createOperation.safeParse({
+        ...operation,
+        weightKg: 18_000,
+      }).success,
+      true,
+    );
+  });
 });

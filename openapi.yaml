@@ -289,7 +289,7 @@ paths:
     post:
       tags: [Campaigns]
       operationId: startCampaign
-      summary: Iniciar una campaña con al menos tres carriers
+      summary: Iniciar una campaña con uno o más carriers
       description: Crea negociaciones y agrega llamadas salientes a la cola en memoria de Node.js.
       requestBody:
         required: true
@@ -1192,11 +1192,11 @@ components:
       properties:
         carrierIds:
           type: array
-          minItems: 3
+          minItems: 1
           uniqueItems: true
           items:
             type: string
-          example: [car_atlas, car_norte, car_pacifico]
+          example: [car_c57ea326-adc2-48fe-8227-165bf890a50b]
         maxParallelCalls:
           type: integer
           minimum: 1

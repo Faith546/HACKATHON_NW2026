@@ -73,6 +73,7 @@ describe("Authorized operator Realtime flow", () => {
       containerNumber: "TCLU-RELAXED",
       origin: "Manzanillo",
       destination: "Guadalajara",
+      weightKg: 18_000,
       service: "DRAYAGE",
       mandate: {
         maxTotalPrice: 9000,

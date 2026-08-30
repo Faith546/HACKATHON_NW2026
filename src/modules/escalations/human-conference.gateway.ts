@@ -26,13 +26,13 @@ export interface TwilioConferenceApi {
     friendlyName: string,
   ): Promise<{ sid: string } | null>;
   addParticipant(
-    conferenceSid: string,
+    conferenceReference: string,
     input: {
       from: string;
       to: string;
       label: string;
     },
-  ): Promise<{ callSid: string | null }>;
+  ): Promise<{ callSid: string | null; conferenceSid: string | null }>;
   findParticipantByLabel?(
     conferenceSid: string,
     label: string,
@@ -49,9 +49,9 @@ export interface TwilioHumanConferenceGatewayConfig {
 }
 
 /**
- * Redirecting a live Twilio call replaces its instructions but does not set the
- * call status to completed. The carrier leg therefore remains connected while
- * it enters the conference and the human participant is dialed into it.
+ * The human is dialed first. The live carrier call is redirected only after
+ * Twilio confirms the human answered, so a busy/no-answer operator cannot
+ * strand the carrier in an empty conference.
  */
 export class TwilioHumanConferenceGateway
   implements HumanConferenceGateway
@@ -60,6 +60,10 @@ export class TwilioHumanConferenceGateway
   private readonly discoveryIntervalMs: number;
   private readonly wait: (milliseconds: number) => Promise<void>;
   private readonly participantAnswerAttempts: number;
+  private readonly completedJoins = new Map<
+    string,
+    JoinHumanConferenceResult
+  >();
 
   constructor(
     private readonly config: TwilioHumanConferenceGatewayConfig,
@@ -93,25 +97,23 @@ export class TwilioHumanConferenceGateway
   async joinHuman(
     input: JoinHumanConferenceInput,
   ): Promise<JoinHumanConferenceResult> {
+    const completed = this.completedJoins.get(input.escalationId);
+    if (completed) return completed;
+
     const from = required(this.config.fromNumber, "TWILIO_PHONE_NUMBER");
     const conferenceName = conferenceNameFor(input.escalationId);
     const participantLabel = `human-${input.escalationId}`.slice(0, 128);
 
-    let conference = await this.api.findActiveConference(conferenceName);
-    if (!conference) {
-      await this.api.redirectCall(
-        required(input.providerCallId, "twilioCallSid"),
-        createConferenceTwiml(conferenceName),
-      );
-      conference = await this.discoverConference(conferenceName);
-    }
-    const existingParticipant = await this.api.findParticipantByLabel?.(
-      conference.sid,
-      participantLabel,
-    );
+    const conference = await this.api.findActiveConference(conferenceName);
+    const existingParticipant = conference
+      ? await this.api.findParticipantByLabel?.(
+          conference.sid,
+          participantLabel,
+        )
+      : null;
     const participant =
       existingParticipant ??
-      (await this.api.addParticipant(conference.sid, {
+      (await this.api.addParticipant(conference?.sid ?? conferenceName, {
         from,
         to: input.humanPhone,
         label: participantLabel,
@@ -126,10 +128,27 @@ export class TwilioHumanConferenceGateway
     }
     await this.waitForHumanAnswer(participantCallSid);
 
-    return {
-      conferenceSid: conference.sid,
+    const participantConferenceSid =
+      "conferenceSid" in participant &&
+      typeof participant.conferenceSid === "string"
+        ? participant.conferenceSid
+        : null;
+    const conferenceSid =
+      conference?.sid ??
+      participantConferenceSid ??
+      (await this.discoverConference(conferenceName)).sid;
+
+    await this.api.redirectCall(
+      required(input.providerCallId, "twilioCallSid"),
+      createConferenceTwiml(conferenceName),
+    );
+
+    const result = {
+      conferenceSid,
       humanParticipantCallSid: participantCallSid,
     };
+    this.completedJoins.set(input.escalationId, result);
+    return result;
   }
 
   private async waitForHumanAnswer(callSid: string): Promise<void> {
@@ -212,11 +231,11 @@ export class TwilioSdkConferenceApi implements TwilioConferenceApi {
   }
 
   async addParticipant(
-    conferenceSid: string,
+    conferenceReference: string,
     input: { from: string; to: string; label: string },
-  ): Promise<{ callSid: string | null }> {
+  ): Promise<{ callSid: string | null; conferenceSid: string | null }> {
     const participant = await this.client
-      .conferences(conferenceSid)
+      .conferences(conferenceReference)
       .participants.create({
         from: input.from,
         to: input.to,
@@ -226,7 +245,10 @@ export class TwilioSdkConferenceApi implements TwilioConferenceApi {
         beep: "false",
         conferenceRecord: "do-not-record",
       });
-    return { callSid: participant.callSid ?? null };
+    return {
+      callSid: participant.callSid ?? null,
+      conferenceSid: participant.conferenceSid ?? null,
+    };
   }
 
   async findParticipantByLabel(

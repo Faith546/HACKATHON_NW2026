@@ -59,8 +59,12 @@ const commitmentEvidenceArguments = z
     }
   });
 
+const voiceCreateOperationSchema = CreateOperationSchema.extend({
+  weightKg: z.number().int().positive(),
+}).strict();
+
 export const voiceToolSchemas = {
-  createOperation: CreateOperationSchema.strict(),
+  createOperation: voiceCreateOperationSchema,
   createMandate: CreateMandateInputSchema.strict(),
   getOperationStatus: operationReferenceArguments,
   listCarriers: emptyArguments,
@@ -113,7 +117,7 @@ const voiceMandateParametersSchema = CreateMandateInputSchema.extend({
 
 export const voiceToolParameterSchemas = {
   ...voiceToolSchemas,
-  createOperation: CreateOperationSchema.extend({
+  createOperation: voiceCreateOperationSchema.extend({
     mandate: voiceMandateParametersSchema,
   }).strict(),
   createMandate: voiceMandateParametersSchema,
