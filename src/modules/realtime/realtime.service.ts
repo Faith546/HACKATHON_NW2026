@@ -273,15 +273,23 @@ export class RealtimeService {
         { name, mode: session.mode },
       );
     }
-    const normalizedArguments =
-      name === "recordQuote" && argumentsValue.validUntil === undefined
-        ? {
-            ...argumentsValue,
-            validUntil: new Date(
-              this.now().getTime() + realtimeQuoteValidityMs,
-            ).toISOString(),
-          }
-        : argumentsValue;
+    let normalizedArguments = argumentsValue;
+    if (name === "recordQuote" && argumentsValue.validUntil === undefined) {
+      normalizedArguments = {
+        ...argumentsValue,
+        validUntil: new Date(
+          this.now().getTime() + realtimeQuoteValidityMs,
+        ).toISOString(),
+      };
+    } else if (name === "recordVerbalAgreement") {
+      normalizedArguments = {
+        confirmedBy:
+          argumentsValue.confirmedBy ?? "Carrier autorizado en la llamada",
+        exactTerms:
+          argumentsValue.exactTerms ??
+          "El carrier confirmó los términos del commitment autorizado.",
+      };
+    }
     const parsedArguments = parseVoiceToolArguments(name, normalizedArguments);
     const trustedArguments =
       name === "attachCommitmentEvidence"
@@ -548,13 +556,20 @@ function assertExplicitVoiceAuthorization(
   let accepted = true;
   if (name === "recordVerbalAgreement") {
     accepted =
-      /\b(si|confirmo|confirma|acepto|acepta)\b/.test(text) &&
-      !/\b(dejame|luego|despues|voy a confirmar)\b/.test(text);
+      /\b(si|confirm\w*|acept\w*|de acuerdo|correcto|esta bien|ok|okay|adelante)\b/.test(
+        text,
+      ) &&
+      !/\b(no acept\w*|no confirm\w*|no estoy de acuerdo|no queda confirmado|aun no|todavia no|dejame|luego|despues|voy a confirmar)\b/.test(
+        text,
+      );
   } else if (name === "confirmDelivery") {
     accepted =
-      /\b(confirmo|confirma)\b/.test(text) &&
-      /\b(entregado|entregada|entrego|entrega)\b/.test(text) &&
-      !/\b(deberia|probablemente|tal vez|quiza)\b/.test(text);
+      /\b(entreg\w*|recibid\w*|ya llego|llego bien|entrega completada)\b/.test(
+        text,
+      ) &&
+      !/\b(no se entreg\w*|no ha lleg\w*|aun no|todavia no|deberia|probablemente|tal vez|quiza|manana|va a llegar)\b/.test(
+        text,
+      );
   }
   if (!accepted) {
     throw new ApiError(

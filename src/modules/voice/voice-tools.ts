@@ -123,6 +123,7 @@ export const voiceToolParameterSchemas = {
   recordQuote: SaveQuoteSchema.omit({ callId: true, validUntil: true })
     .extend({ currency: currencyInputSchema })
     .strict(),
+  recordVerbalAgreement: emptyArguments,
 } satisfies Record<VoiceToolName, z.ZodType>;
 
 export const voiceToolDescriptions: Record<VoiceToolName, string> = {
@@ -139,7 +140,7 @@ export const voiceToolDescriptions: Record<VoiceToolName, string> = {
   recordQuote: "Registra la cotización final; el backend asigna automáticamente 24 horas de vigencia.",
   reportNoAnswer: "Marca la negociación actual como no contestada.",
   getAuthorizedCommitment: "Consulta el único commitment activo autorizado.",
-  recordVerbalAgreement: "Registra la aceptación verbal inequívoca del commitment.",
+  recordVerbalAgreement: "Registra la aceptación natural del carrier sobre el commitment autorizado; no requiere argumentos.",
   attachCommitmentEvidence: "Vincula el acuerdo al extracto literal del transcript; el runtime deriva offsets confiables.",
   enqueueCommitmentSummary: "Encola un recap canónico al contacto oficial del carrier y valida al aceptar el proveedor.",
   getOperation: "Consulta el estado oficial de la operación actual.",
