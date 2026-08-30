@@ -61,6 +61,10 @@ export const CreateOperationSchema = z.object({
   notes: z.string().trim().min(1).optional(),
 });
 
+export const CreateOperationHttpSchema = CreateOperationSchema.extend({
+  carrierId: z.string().trim().min(1).optional(),
+});
+
 export const ListOperationsQuerySchema = z.object({
   status: z.enum(operationStatuses).optional(),
 });
@@ -70,6 +74,9 @@ export const CancelOperationSchema = z.object({
 });
 
 export type CreateOperationInput = z.infer<typeof CreateOperationSchema>;
+export type CreateOperationHttpInput = z.infer<
+  typeof CreateOperationHttpSchema
+>;
 export type ListOperationsQuery = z.infer<typeof ListOperationsQuerySchema>;
 export type CancelOperationInput = z.infer<typeof CancelOperationSchema>;
 
