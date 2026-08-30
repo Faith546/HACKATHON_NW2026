@@ -25,7 +25,7 @@ import { DrizzleVoiceCoreAdapter } from "../src/modules/voice/drizzle-voice-core
 import { InMemoryJobQueue } from "../src/shared/queue/in-memory-job-queue";
 
 describe("Autonomous voice sourcing orchestration", () => {
-  it("waits two minutes after the last quote before enqueuing COMMIT exactly once", async () => {
+  it("waits 45 seconds after the last quote before enqueuing COMMIT exactly once", async () => {
     const suffix = randomUUID();
     const operation = await operationsService.createOperation({
       customerName: `Autonomous ${suffix}`,
@@ -137,10 +137,10 @@ describe("Autonomous voice sourcing orchestration", () => {
         .all();
       assert.equal(commitmentCount, 1);
       assert.equal(commitCalls.length, 0);
-      assert.equal(scheduledDelayMs, 120_000);
+      assert.equal(scheduledDelayMs, 45_000);
       assert.equal(scheduleCount, 1);
 
-      currentTime = new Date(currentTime.getTime() + 120_000);
+      currentTime = new Date(currentTime.getTime() + 45_000);
       const task = scheduledTask as (() => Promise<void> | void) | null;
       assert.ok(task);
       await task();

@@ -97,7 +97,7 @@ type DelayedTaskScheduler = (
   delayMs: number,
 ) => void;
 
-const commitCallDelayAfterLastQuoteMs = 2 * 60 * 1_000;
+const commitCallDelayAfterLastQuoteMs = 45 * 1_000;
 
 function scheduleDelayedTask(
   task: () => Promise<void> | void,
