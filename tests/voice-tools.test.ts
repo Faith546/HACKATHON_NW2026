@@ -40,7 +40,7 @@ describe("voice tool schemas", () => {
   it("requires weight when Voice creates an operation", () => {
     const operation = {
       customerName: "Textiles Pacífico",
-      containerNumber: "TCLU-WEIGHT",
+      containerNumber: "TCLU1234567",
       origin: "Manzanillo",
       destination: "Guadalajara",
       service: "DRAYAGE" as const,
@@ -61,6 +61,39 @@ describe("voice tool schemas", () => {
         weightKg: 18_000,
       }).success,
       true,
+    );
+  });
+
+  it("preserves repeated container characters and rejects a missing digit", () => {
+    const baseOperation = {
+      customerName: "Textiles Pacífico",
+      origin: "Manzanillo",
+      destination: "Guadalajara",
+      weightKg: 18_000,
+      service: "DRAYAGE" as const,
+      mandate: {
+        maxTotalPrice: 9000,
+        currency: "MXN",
+        pickupDate: "2026-09-03",
+      },
+    };
+    const parsed = parseVoiceToolArguments("createOperation", {
+      ...baseOperation,
+      containerNumber: "a, b, c, d, 1, 1, 2, 2, 3, 3, 4",
+    });
+
+    assert.equal(parsed.containerNumber, "ABCD1122334");
+    assert.throws(
+      () =>
+        parseVoiceToolArguments("createOperation", {
+          ...baseOperation,
+          containerNumber: "ABCD112334",
+        }),
+      (error: unknown) =>
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "VOICE_TOOL_ARGUMENTS_INVALID",
     );
   });
 });

@@ -4,13 +4,19 @@ import { describe, it } from "node:test";
 import { eq } from "drizzle-orm";
 import { db } from "../src/db";
 import {
+  auditEvents,
   campaigns,
   carriers,
   mandates,
   negotiations,
   operations,
 } from "../src/db/schema";
-import { integrationService } from "../src/modules/integration/integration.service";
+import type { CallsService } from "../src/modules/calls/calls.service";
+import {
+  createIntegrationService,
+  integrationService,
+} from "../src/modules/integration/integration.service";
+import { operationsService } from "../src/modules/operations/operations.service";
 
 describe("IntegrationService facade", () => {
   it("resolves the most recently updated inbound operation", async () => {
@@ -141,6 +147,75 @@ describe("IntegrationService facade", () => {
       await integrationService.resolveInboundCall("+529999999999"),
       null,
     );
+  });
+
+  it("returns a container suggestion to Voice without selecting it", async () => {
+    const digits = randomUUID().replace(/\D/g, "").padEnd(7, "0").slice(0, 7);
+    const containerNumber = `ABCD${digits}`;
+    const operation = await operationsService.createOperation({
+      customerName: "Container recall",
+      containerNumber,
+      origin: "Manzanillo",
+      destination: "Guadalajara",
+      weightKg: 18_000,
+      service: "DRAYAGE",
+      mandate: {
+        maxTotalPrice: 9_000,
+        currency: "MXN",
+        pickupDate: "2026-09-03",
+      },
+    });
+    const voiceIntegration = createIntegrationService({
+      callsService: {
+        bindOperationContext: async () => undefined,
+      } as unknown as CallsService,
+    });
+
+    try {
+      const exactResult = await voiceIntegration.executeVoiceTool({
+        name: "getOperationStatus",
+        context: {
+          callId: "call_container_exact",
+          operationId: null,
+          carrierId: null,
+          negotiationId: null,
+          actorType: "INTERNAL_OPERATOR",
+          mandateId: null,
+        },
+        arguments: { containerNumber },
+      });
+      assert.deepEqual(
+        (exactResult as { quotes: unknown[] }).quotes,
+        [],
+      );
+
+      const missingCharacter =
+        containerNumber.slice(0, 4) + containerNumber.slice(5);
+      const result = await voiceIntegration.executeVoiceTool({
+        name: "getOperationStatus",
+        context: {
+          callId: "call_container_recall",
+          operationId: null,
+          carrierId: null,
+          negotiationId: null,
+          actorType: "INTERNAL_OPERATOR",
+          mandateId: null,
+        },
+        arguments: { containerNumber: missingCharacter },
+      });
+
+      assert.deepEqual(result, {
+        found: false,
+        requestedContainerNumber: missingCharacter,
+        possibleContainerNumbers: [containerNumber],
+      });
+    } finally {
+      db.delete(auditEvents)
+        .where(eq(auditEvents.operationId, operation.id))
+        .run();
+      db.delete(mandates).where(eq(mandates.operationId, operation.id)).run();
+      db.delete(operations).where(eq(operations.id, operation.id)).run();
+    }
   });
 });
 

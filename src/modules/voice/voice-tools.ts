@@ -26,15 +26,19 @@ import {
 import type { VoiceToolName } from "./voice-core.port";
 
 const identifier = z.string().trim().min(1);
-const containerNumber = identifier.describe(
+const containerReference = identifier.describe(
   "Número de contenedor confirmado carácter por carácter. Conserva todas las letras y dígitos; no completes ni elimines caracteres.",
 );
+const containerNumber = containerReference.regex(/^[A-Z]{4}[0-9]{7}$/, {
+  message:
+    "El contenedor debe tener exactamente cuatro letras y siete dígitos.",
+});
 const nonEmptyText = z.string().trim().min(1);
 const emptyArguments = z.object({}).strict();
 const operationReferenceArguments = z
   .object({
     operationId: identifier.optional(),
-    containerNumber: containerNumber.optional(),
+    containerNumber: containerReference.optional(),
   })
   .strict();
 const commitmentEvidenceArguments = z
@@ -167,7 +171,18 @@ export function parseVoiceToolArguments(
   name: VoiceToolName,
   value: Record<string, unknown>,
 ): Record<string, unknown> {
-  const parsed = voiceToolSchemas[name].safeParse(value);
+  const containerValue = value.containerNumber;
+  const normalizedValue =
+    (name === "createOperation" || name === "getOperationStatus") &&
+    typeof containerValue === "string"
+      ? {
+          ...value,
+          containerNumber: containerValue
+            .replace(/[^A-Za-z0-9]/g, "")
+            .toUpperCase(),
+        }
+      : value;
+  const parsed = voiceToolSchemas[name].safeParse(normalizedValue);
   if (!parsed.success) {
     throw new ApiError(
       422,
