@@ -33,6 +33,10 @@ export interface TwilioConferenceApi {
       label: string;
     },
   ): Promise<{ callSid: string | null }>;
+  findParticipantByLabel?(
+    conferenceSid: string,
+    label: string,
+  ): Promise<{ callSid: string | null } | null>;
   getCallStatus(callSid: string): Promise<string>;
 }
 
@@ -91,18 +95,27 @@ export class TwilioHumanConferenceGateway
   ): Promise<JoinHumanConferenceResult> {
     const from = required(this.config.fromNumber, "TWILIO_PHONE_NUMBER");
     const conferenceName = conferenceNameFor(input.escalationId);
+    const participantLabel = `human-${input.escalationId}`.slice(0, 128);
 
-    await this.api.redirectCall(
-      required(input.providerCallId, "twilioCallSid"),
-      createConferenceTwiml(conferenceName),
+    let conference = await this.api.findActiveConference(conferenceName);
+    if (!conference) {
+      await this.api.redirectCall(
+        required(input.providerCallId, "twilioCallSid"),
+        createConferenceTwiml(conferenceName),
+      );
+      conference = await this.discoverConference(conferenceName);
+    }
+    const existingParticipant = await this.api.findParticipantByLabel?.(
+      conference.sid,
+      participantLabel,
     );
-
-    const conference = await this.discoverConference(conferenceName);
-    const participant = await this.api.addParticipant(conference.sid, {
-      from,
-      to: input.humanPhone,
-      label: `human-${input.escalationId}`.slice(0, 128),
-    });
+    const participant =
+      existingParticipant ??
+      (await this.api.addParticipant(conference.sid, {
+        from,
+        to: input.humanPhone,
+        label: participantLabel,
+      }));
     const participantCallSid = participant.callSid;
     if (!participantCallSid) {
       throw new ApiError(
@@ -214,6 +227,19 @@ export class TwilioSdkConferenceApi implements TwilioConferenceApi {
         conferenceRecord: "do-not-record",
       });
     return { callSid: participant.callSid ?? null };
+  }
+
+  async findParticipantByLabel(
+    conferenceSid: string,
+    label: string,
+  ): Promise<{ callSid: string | null } | null> {
+    const participants = await this.client
+      .conferences(conferenceSid)
+      .participants.list({ limit: 100 });
+    const matching = participants.find(
+      (participant) => participant.label === label,
+    );
+    return matching ? { callSid: matching.callSid ?? null } : null;
   }
 
   async getCallStatus(callSid: string): Promise<string> {

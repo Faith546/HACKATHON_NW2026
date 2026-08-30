@@ -40,6 +40,7 @@ export type SelectQuoteInput = z.infer<typeof SelectQuoteSchema>;
 
 export type EvaluationCode =
   | "ALLOWED"
+  | "CURRENCY_MISMATCH"
   | "PRICE_EXCEEDS_MANDATE"
   | "DATE_OUTSIDE_MANDATE";
 
@@ -52,8 +53,9 @@ export interface EvaluationResult {
 
 export function toQuoteResponse(
   quote: typeof quotes.$inferSelect,
-  dispatcherName?: string | null,
+  fallbackDispatcherName?: string | null,
 ) {
+  const dispatcherName = quote.dispatcherName ?? fallbackDispatcherName;
   return {
     id: quote.id,
     negotiationId: quote.negotiationId,

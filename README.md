@@ -15,9 +15,16 @@ npm start
 - Swagger: `http://127.0.0.1:3000/docs`
 - Health: `http://127.0.0.1:3000/api/v1/health`
 
-Sin credenciales se usa un gateway telefónico falso. Para Twilio y OpenAI
-Realtime, copia `.env.example` a `.env` mediante el mecanismo de variables de tu
-entorno y completa los secretos sin versionarlos.
+`VOICE_RUNTIME_MODE=local` usa gateways falsos y no hace llamadas externas. Para
+Twilio y OpenAI Realtime, copia `.env.example` a `.env`, cambia explícitamente a
+`VOICE_RUNTIME_MODE=twilio` y completa los secretos sin versionarlos. El modo
+Twilio también exige URLs públicas `https`/`wss`; el backend falla al iniciar si
+falta alguna variable requerida.
+
+La creación y administración de operaciones se realiza únicamente por el API
+HTTP documentado en Swagger. Realtime cubre las conversaciones logísticas sobre
+una llamada ya asociada a una operación; el modo inalcanzable `CREATE_OPERATION`
+fue retirado del contrato público.
 
 ## Voice runtime
 
@@ -32,6 +39,7 @@ Implementado:
 - Barge-in mediante VAD semántico y `TwilioRealtimeTransportLayer`.
 - Sesiones Realtime con tools limitadas estructuralmente por modo.
 - Adapter Twilio SMS para recaps.
+- Sin grabación de audio; sólo se persisten transcript y brief.
 
 La integración exacta con los services de Parte A está documentada en
 [`docs/05-integracion-parte-a-voice.md`](docs/05-integracion-parte-a-voice.md).

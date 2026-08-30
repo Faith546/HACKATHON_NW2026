@@ -116,7 +116,6 @@ export interface TelephonyGateway {
   startOutboundCall(
     input: StartOutboundCallInput,
   ): Promise<{ providerCallId: string }>;
-  startRecording(providerCallId: string): Promise<void>;
 }
 
 export interface CallScheduler {
@@ -151,6 +150,7 @@ export function toCallResponse(call: Call) {
     purpose: call.purpose,
     status: call.status,
     transcript: call.transcript,
+    brief: call.brief,
     startedAt: call.startedAt,
     endedAt: call.endedAt,
     createdAt: call.createdAt,

@@ -109,29 +109,6 @@ export class WebhooksService {
     await this.dependencies.callsService.applyProviderStatus(body.CallSid, status);
   }
 
-  async receiveRecordingStatus(
-    body: Record<string, unknown>,
-    request: TwilioWebhookRequest,
-  ): Promise<void> {
-    this.validateSignature(request);
-    const callSid = typeof body.CallSid === "string" ? body.CallSid : undefined;
-    const recordingSid = typeof body.RecordingSid === "string" ? body.RecordingSid : undefined;
-    const recordingStatus = typeof body.RecordingStatus === "string" ? body.RecordingStatus : undefined;
-
-    if (!callSid || !recordingSid || !recordingStatus) {
-      throw new ApiError(
-        422,
-        "INVALID_RECORDING_PAYLOAD",
-        "El payload de grabación está incompleto.",
-      );
-    }
-    
-    console.info(`[RECORDING] status update\\nCallSid: ${callSid}\\nRecordingSid: ${recordingSid}\\nStatus: ${recordingStatus}`);
-    
-    // Si fuera necesario guardar el RecordingSid en la base de datos,
-    // se haría aquí a través de callsService (ej. callsService.setRecording(callSid, recordingSid, recordingStatus)).
-  }
-
   private async createInboundCall(body: TwilioVoiceWebhook) {
     const context = await this.dependencies.voiceCore.resolveInboundCallContext({
       fromNumber: body.From,

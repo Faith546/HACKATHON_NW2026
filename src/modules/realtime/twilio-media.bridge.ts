@@ -141,7 +141,6 @@ export class TwilioMediaBridge {
       start.callSid,
       "IN_PROGRESS",
     );
-    void this.callsService.startRecording(callId).catch(() => undefined);
     const sessionContext = await this.realtimeService.create({
       callId,
       actorType: "CARRIER",
@@ -207,6 +206,20 @@ export class TwilioMediaBridge {
       } finally {
         await transcriptWriteChain;
       }
+      if (transcriptWriteError) {
+        throw new ApiError(
+          503,
+          "TRANSCRIPT_PERSISTENCE_FAILED",
+          "El último write incremental del transcript no pudo persistirse.",
+          {
+            callId,
+            message:
+              transcriptWriteError instanceof Error
+                ? transcriptWriteError.message
+                : String(transcriptWriteError),
+          },
+        );
+      }
       if (
         webSocket.readyState === WebSocket.OPEN ||
         webSocket.readyState === WebSocket.CONNECTING
@@ -222,8 +235,14 @@ export class TwilioMediaBridge {
     const close = () => {
       finalization ??= (async () => {
         unregisterCloser();
-        await closeTransport();
+        let transportError: unknown = null;
+        try {
+          await closeTransport();
+        } catch (error) {
+          transportError = error;
+        }
         await this.realtimeService.close(sessionContext.id);
+        if (transportError) throw transportError;
       })();
       return finalization;
     };
@@ -250,8 +269,11 @@ export class TwilioMediaBridge {
       }
     };
 
-    webSocket.once("close", () => void close());
-    webSocket.once("error", () => void close());
+    const reportCloseFailure = (error: unknown) => {
+      console.error("[REALTIME_CLOSE_FAILED]", error);
+    };
+    webSocket.once("close", () => void close().catch(reportCloseFailure));
+    webSocket.once("error", () => void close().catch(reportCloseFailure));
 
     openAiSession.on("transport_event", (event) => {
       if (
@@ -288,7 +310,7 @@ export class TwilioMediaBridge {
       }
       if (message.event === "stop") {
         console.info("[TWILIO] stop");
-        void close();
+        void close().catch(reportCloseFailure);
       }
     });
     openAiSession.on("history_updated", (history) => {
@@ -306,7 +328,7 @@ export class TwilioMediaBridge {
       if (latestAgentItem) observe(latestAgentItem, true);
     });
     openAiSession.on("error", () => {
-      void close();
+      void close().catch(reportCloseFailure);
       webSocket.close(1011, "OpenAI Realtime error");
     });
 

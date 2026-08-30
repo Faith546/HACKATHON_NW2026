@@ -64,7 +64,7 @@ export class ExecutionRepository {
         );
       }
 
-      const call = executionCall(tx, operationId, input.callId);
+      const call = executionCall(tx, operationId, input.callId, "EXECUTION");
       const commitment = tx
         .select()
         .from(commitments)
@@ -155,7 +155,7 @@ export class ExecutionRepository {
         );
       }
 
-      const call = executionCall(tx, operationId, input.callId);
+      const call = executionCall(tx, operationId, input.callId, "DELIVERY");
       const commitment = tx
         .select()
         .from(commitments)
@@ -227,6 +227,7 @@ function executionCall(
   tx: Transaction,
   operationId: string,
   callId: string,
+  expectedPurpose: "EXECUTION" | "DELIVERY",
 ): typeof calls.$inferSelect {
   const call = tx.select().from(calls).where(eq(calls.id, callId)).get();
   if (!call) {
@@ -251,6 +252,14 @@ function executionCall(
       "CALL_HAS_NO_EXECUTION_EVIDENCE",
       "La llamada aún no puede respaldar un evento de ejecución.",
       { callId, status: call.status },
+    );
+  }
+  if (call.purpose !== expectedPurpose) {
+    throw new ApiError(
+      409,
+      "CALL_PURPOSE_MISMATCH",
+      `La evidencia requiere una llamada con propósito ${expectedPurpose}.`,
+      { callId, purpose: call.purpose, expectedPurpose },
     );
   }
   return call;

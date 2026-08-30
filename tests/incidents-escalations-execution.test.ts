@@ -331,6 +331,33 @@ describe("Escalations endpoints and Twilio conference gateway", () => {
         .get();
       assert.match(humanJoinedAudit?.payloadJson ?? "", /CF_TEST/);
 
+      const getEscalation = await fetch(
+        `${http.baseUrl}/escalations/esc_test`,
+      );
+      assert.equal(getEscalation.status, 200);
+      assert.equal((await getEscalation.json()).status, "HUMAN_JOINED");
+
+      const resolve = await fetch(
+        `${http.baseUrl}/escalations/esc_test/resolve`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            resolutionSummary: "Humano autorizó el cambio bajo el mandato vigente.",
+          }),
+        },
+      );
+      assert.equal(resolve.status, 200);
+      assert.equal((await resolve.json()).status, "RESOLVED");
+      assert.equal(
+        database.select().from(operations).where(eq(operations.id, "op_esc")).get()?.status,
+        "IN_TRANSIT",
+      );
+      assert.equal(
+        database.select().from(incidents).where(eq(incidents.id, "inc_esc")).get()?.status,
+        "RESOLVED",
+      );
+
       const duplicate = await fetch(
         `${http.baseUrl}/escalations/esc_test/join-human`,
         {
@@ -394,6 +421,7 @@ describe("Escalations endpoints and Twilio conference gateway", () => {
   it("redirects the live carrier leg into Twilio Conference without hanging it up", async () => {
     const callsMade: Array<Record<string, unknown>> = [];
     let lookupCount = 0;
+    let participantCallSid: string | null = null;
     const api: TwilioConferenceApi = {
       redirectCall: async (callSid, twiml) => {
         callsMade.push({ action: "redirect", callSid, twiml });
@@ -405,8 +433,11 @@ describe("Escalations endpoints and Twilio conference gateway", () => {
       },
       addParticipant: async (conferenceSid, input) => {
         callsMade.push({ action: "participant", conferenceSid, ...input });
-        return { callSid: "CA_HUMAN" };
+        participantCallSid = "CA_HUMAN";
+        return { callSid: participantCallSid };
       },
+      findParticipantByLabel: async () =>
+        participantCallSid ? { callSid: participantCallSid } : null,
       getCallStatus: async (callSid) => {
         callsMade.push({ action: "participant-status", callSid });
         return "in-progress";
@@ -434,11 +465,28 @@ describe("Escalations endpoints and Twilio conference gateway", () => {
       conferenceSid: "CF_REAL",
       humanParticipantCallSid: "CA_HUMAN",
     });
-    const redirect = callsMade[0];
+    const redirect = callsMade.find((call) => call.action === "redirect");
     assert.equal(redirect?.callSid, "CA_CARRIER");
     assert.match(String(redirect?.twiml), /<Conference/);
     assert.match(String(redirect?.twiml), /record="do-not-record"/);
     assert.doesNotMatch(String(redirect?.twiml), /<Hangup/);
+
+    const retried = await gateway.joinHuman({
+      escalationId: "esc_twilio",
+      operationId: "op_twilio",
+      callId: "call_twilio",
+      providerCallId: "CA_CARRIER",
+      humanPhone: "+525555555501",
+    });
+    assert.deepEqual(retried, result);
+    assert.equal(
+      callsMade.filter((call) => call.action === "redirect").length,
+      1,
+    );
+    assert.equal(
+      callsMade.filter((call) => call.action === "participant").length,
+      1,
+    );
   });
 });
 
@@ -592,6 +640,36 @@ describe("Execution endpoints", () => {
         error instanceof Error &&
         "code" in error &&
         error.code === "INVALID_STATE_TRANSITION",
+    );
+    sqlite.close();
+  });
+
+  it("rejects QUOTE or COMMIT calls as pickup evidence", () => {
+    const { sqlite, database } = createBusinessFlowDatabase();
+    seedExecutionContext(database, {
+      operationId: "op_wrong_purpose",
+      operationStatus: "BOOKED",
+      commitmentStatus: "VALID",
+    });
+    seedCall(database, {
+      callId: "call_old_quote",
+      operationId: "op_wrong_purpose",
+      carrierId: "car_exec",
+      status: "COMPLETED",
+      purpose: "QUOTE",
+    });
+    const service = createExecutionService({ database });
+    assert.throws(
+      () =>
+        service.confirmPickup("op_wrong_purpose", {
+          callId: "call_old_quote",
+          occurredAt: t0,
+          confirmedBy: "Juan",
+        }),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "CALL_PURPOSE_MISMATCH",
     );
     sqlite.close();
   });

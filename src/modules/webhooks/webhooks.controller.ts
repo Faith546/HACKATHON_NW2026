@@ -63,13 +63,6 @@ export class WebhooksController {
     response.status(204).send();
   };
 
-  receiveRecordingStatus = async (request: Request, response: Response) => {
-    const parameters = formParameters(request.body);
-    const twilioRequest = this.twilioRequest(request, parameters);
-    await this.service.receiveRecordingStatus(parameters, twilioRequest);
-    response.status(204).send();
-  };
-
   private twilioRequest(
     request: Request,
     parameters: Record<string, string>,

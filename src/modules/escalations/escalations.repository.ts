@@ -18,6 +18,7 @@ import type {
 import type {
   JoinHumanInput,
   RequestEscalationInput,
+  ResolveEscalationInput,
 } from "./escalations.types";
 
 export type EscalationsDatabase = BetterSQLite3Database<
@@ -34,6 +35,7 @@ export interface EscalationsRepositoryOptions {
 export interface BeginHumanJoinResult {
   escalation: EscalationRecord;
   gatewayInput: JoinHumanConferenceInput;
+  alreadyQueued: boolean;
 }
 
 const activeEscalationStatuses = [
@@ -188,6 +190,7 @@ export class EscalationsRepository {
           reason: input.reason,
           contextSummary: input.contextSummary,
           humanPhone: input.requestedHumanPhone ?? null,
+          previousOperationStatus: operation.status,
           status: "REQUESTED",
           createdAt: occurredAt,
         })
@@ -244,7 +247,10 @@ export class EscalationsRepository {
           { escalationId },
         );
       }
-      if (escalation.status !== "REQUESTED") {
+      const alreadyQueued =
+        escalation.status === "DIALING_HUMAN" &&
+        escalation.humanPhone === input.humanPhone;
+      if (escalation.status !== "REQUESTED" && !alreadyQueued) {
         throw new ApiError(
           409,
           "INVALID_STATE_TRANSITION",
@@ -283,6 +289,20 @@ export class EscalationsRepository {
         );
       }
 
+      if (alreadyQueued) {
+        return {
+          escalation,
+          gatewayInput: {
+            escalationId: escalation.id,
+            operationId: escalation.operationId,
+            callId: call.id,
+            providerCallId: call.twilioCallSid,
+            humanPhone: input.humanPhone,
+          },
+          alreadyQueued: true,
+        };
+      }
+
       const occurredAt = this.now().toISOString();
       const updated = tx
         .update(escalations)
@@ -318,6 +338,7 @@ export class EscalationsRepository {
           providerCallId: call.twilioCallSid,
           humanPhone: input.humanPhone,
         },
+        alreadyQueued: false,
       };
     });
   }
@@ -372,6 +393,7 @@ export class EscalationsRepository {
         .set({
           status: "HUMAN_JOINED",
           twilioConferenceSid: result.conferenceSid,
+          humanParticipantCallSid: result.humanParticipantCallSid,
         })
         .where(eq(escalations.id, escalation.id))
         .returning()
@@ -439,5 +461,96 @@ export class EscalationsRepository {
         .where(eq(escalations.id, escalationId))
         .get() ?? null
     );
+  }
+
+  resolve(
+    escalationId: string,
+    input: ResolveEscalationInput,
+    actorId?: string,
+  ): EscalationRecord {
+    return this.database.transaction((tx) => {
+      const escalation = tx
+        .select()
+        .from(escalations)
+        .where(eq(escalations.id, escalationId))
+        .get();
+      if (!escalation) {
+        throw new ApiError(
+          404,
+          "RESOURCE_NOT_FOUND",
+          "La escalación no existe.",
+          { escalationId },
+        );
+      }
+      if (escalation.status === "RESOLVED") return escalation;
+      if (
+        escalation.status !== "HUMAN_JOINED" &&
+        escalation.status !== "FAILED"
+      ) {
+        throw new ApiError(
+          409,
+          "INVALID_STATE_TRANSITION",
+          `La escalación no puede resolverse desde ${escalation.status}.`,
+          { escalationId, status: escalation.status },
+        );
+      }
+
+      const operation = tx
+        .select()
+        .from(operations)
+        .where(eq(operations.id, escalation.operationId))
+        .get();
+      if (!operation) {
+        throw new ApiError(404, "RESOURCE_NOT_FOUND", "La operación no existe.");
+      }
+      if (operation.status !== "ESCALATED") {
+        throw new ApiError(
+          409,
+          "INVALID_STATE_TRANSITION",
+          "La operación ya no se encuentra escalada.",
+          { operationId: operation.id, status: operation.status },
+        );
+      }
+
+      const occurredAt = this.now().toISOString();
+      const resolved = tx
+        .update(escalations)
+        .set({ status: "RESOLVED", resolvedAt: occurredAt })
+        .where(eq(escalations.id, escalation.id))
+        .returning()
+        .get();
+      if (escalation.incidentId) {
+        tx.update(incidents)
+          .set({ status: "RESOLVED", resolvedAt: occurredAt })
+          .where(eq(incidents.id, escalation.incidentId))
+          .run();
+      }
+      tx.update(operations)
+        .set({
+          status: escalation.previousOperationStatus,
+          updatedAt: occurredAt,
+        })
+        .where(eq(operations.id, operation.id))
+        .run();
+      tx.insert(auditEvents)
+        .values({
+          id: this.createAuditId(),
+          operationId: escalation.operationId,
+          eventType: "ESCALATION_RESOLVED",
+          actorType: "INTERNAL_OPERATOR",
+          actorId: actorId ?? null,
+          callId: escalation.callId,
+          entityType: "ESCALATION",
+          entityId: escalation.id,
+          payloadJson: JSON.stringify({
+            resolutionSummary: input.resolutionSummary,
+            restoredOperationStatus: escalation.previousOperationStatus,
+            incidentId: escalation.incidentId,
+          }),
+          occurredAt,
+        })
+        .run();
+      return resolved;
+    });
   }
 }

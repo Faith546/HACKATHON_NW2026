@@ -231,6 +231,7 @@ export class MarketRepository {
           currency: input.currency,
           pickupDate: input.pickupDate,
           notes: input.notes ?? null,
+          dispatcherName: input.dispatcherName ?? context.carrier.dispatcherName,
           valid: evaluation.result.allowed,
           invalidReason: evaluation.invalidReason,
           mandateId: mandate.id,
@@ -332,7 +333,8 @@ export class MarketRepository {
     input: SelectQuoteInput,
     actorId?: string,
   ) {
-    return db.transaction((tx) => {
+    try {
+      return db.transaction((tx) => {
       const operation = tx
         .select()
         .from(operations)
@@ -543,6 +545,68 @@ export class MarketRepository {
         .run();
 
       return selection;
+      }, { behavior: "immediate" });
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "NO_ELIGIBLE_QUOTES") {
+        this.failCampaignWithoutEligibleQuotes(
+          operationId,
+          String(error.details?.campaignId ?? ""),
+          error.details ?? {},
+        );
+      }
+      throw error;
+    }
+  }
+
+  private failCampaignWithoutEligibleQuotes(
+    operationId: string,
+    campaignId: string,
+    details: Record<string, unknown>,
+  ): void {
+    if (!campaignId) return;
+    db.transaction((tx) => {
+      const campaign = tx
+        .select()
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.id, campaignId),
+            eq(campaigns.operationId, operationId),
+          ),
+        )
+        .get();
+      if (!campaign || !openCampaignStatuses.includes(campaign.status as never)) {
+        return;
+      }
+      const occurredAt = this.now().toISOString();
+      tx.update(campaigns)
+        .set({ status: "FAILED", completedAt: occurredAt })
+        .where(eq(campaigns.id, campaign.id))
+        .run();
+      tx.update(operations)
+        .set({ status: "NEEDS_CARRIER", updatedAt: occurredAt })
+        .where(
+          and(
+            eq(operations.id, operationId),
+            eq(operations.status, "SOURCING"),
+          ),
+        )
+        .run();
+      tx.insert(auditEvents)
+        .values({
+          id: `evt_${randomUUID()}`,
+          operationId,
+          eventType: "CAMPAIGN_FAILED",
+          actorType: "SYSTEM",
+          entityType: "CAMPAIGN",
+          entityId: campaign.id,
+          payloadJson: JSON.stringify({
+            reason: "NO_ELIGIBLE_QUOTES",
+            ...details,
+          }),
+          occurredAt,
+        })
+        .run();
     }, { behavior: "immediate" });
   }
 
@@ -592,8 +656,7 @@ export class MarketRepository {
       reasons.push(
         `La moneda ${input.currency} no coincide con ${mandate.currency}.`,
       );
-      // OpenAPI groups monetary violations under PRICE_EXCEEDS_MANDATE.
-      code = "PRICE_EXCEEDS_MANDATE";
+      code = "CURRENCY_MISMATCH";
     }
     if (totalPriceCents > mandate.maxTotalPriceCents) {
       reasons.push(

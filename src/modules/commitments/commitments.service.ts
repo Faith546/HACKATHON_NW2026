@@ -25,6 +25,7 @@ export interface CommitmentSummaryQueue {
   enqueue(
     job: CommitmentSummaryJob,
     processor: CommitmentSummaryProcessor,
+    onExhausted?: (error: unknown) => Promise<void> | void,
   ): void;
 }
 
@@ -36,6 +37,7 @@ interface QueuedSummaryJob {
   job: CommitmentSummaryJob;
   processor: CommitmentSummaryProcessor;
   attempt: number;
+  onExhausted?: (error: unknown) => Promise<void> | void;
 }
 
 /**
@@ -50,6 +52,7 @@ export class InMemoryCommitmentSummaryQueue
   private readonly idleWaiters: Array<() => void> = [];
   private active = 0;
   private scheduledRetries = 0;
+  private readonly queuedCommitmentIds = new Set<string>();
 
   readonly exhausted: Array<{
     job: CommitmentSummaryJob;
@@ -72,8 +75,11 @@ export class InMemoryCommitmentSummaryQueue
   enqueue(
     job: CommitmentSummaryJob,
     processor: CommitmentSummaryProcessor,
+    onExhausted?: (error: unknown) => Promise<void> | void,
   ): void {
-    this.pending.push({ job, processor, attempt: 0 });
+    if (this.queuedCommitmentIds.has(job.commitmentId)) return;
+    this.queuedCommitmentIds.add(job.commitmentId);
+    this.pending.push({ job, processor, attempt: 0, onExhausted });
     queueMicrotask(() => this.pump());
   }
 
@@ -95,6 +101,7 @@ export class InMemoryCommitmentSummaryQueue
   private async run(item: QueuedSummaryJob): Promise<void> {
     try {
       await item.processor(item.job);
+      this.queuedCommitmentIds.delete(item.job.commitmentId);
     } catch (error) {
       if (item.attempt < this.maxRetries) {
         this.scheduledRetries += 1;
@@ -105,6 +112,13 @@ export class InMemoryCommitmentSummaryQueue
         }, this.retryDelayMs);
       } else {
         this.exhausted.push({ job: item.job, error });
+        try {
+          await item.onExhausted?.(error);
+        } catch (reportingError) {
+          this.exhausted.push({ job: item.job, error: reportingError });
+        } finally {
+          this.queuedCommitmentIds.delete(item.job.commitmentId);
+        }
       }
     } finally {
       this.active -= 1;
@@ -221,6 +235,9 @@ export class CommitmentsService {
       { commitmentId },
       async (job) => {
         await this.sendSummary(job.commitmentId);
+      },
+      async (error) => {
+        await this.repository.markSummaryExhausted(commitmentId, error);
       },
     );
     return pending;

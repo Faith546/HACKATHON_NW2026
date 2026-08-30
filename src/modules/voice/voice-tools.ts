@@ -69,7 +69,7 @@ export const voiceToolSchemas = {
   recordVerbalAgreement: VerbalAgreementSchema.omit({ callId: true }).strict(),
   attachCommitmentEvidence: commitmentEvidenceArguments,
   enqueueCommitmentSummary: z
-    .object({ channel: z.enum(["SMS", "EMAIL"]).default("SMS") })
+    .object({ channel: z.literal("SMS").default("SMS") })
     .strict(),
   getOperation: emptyArguments,
   reportIncident: ReportIncidentSchema.omit({ callId: true }).strict(),

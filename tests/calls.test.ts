@@ -130,6 +130,12 @@ describe("calls HTTP vertical slice", () => {
     assert.deepEqual(brief.objections, []);
     assert.deepEqual(brief.nextSteps, []);
     assert.equal(auditEvents.at(-1)?.eventType, "CALL_BRIEF_SAVED");
+
+    const getResponse = await fetch(`${baseUrl}/calls/call_test_001`);
+    const call = (await getResponse.json()) as Record<string, any>;
+    assert.equal(getResponse.status, 200);
+    assert.equal(call.brief.summary, "El carrier cotizó $8,500 MXN.");
+    assert.equal(call.brief.outcome, "QUOTE_OBTAINED");
   });
 
   it("returns the shared validation envelope for an invalid purpose", async () => {

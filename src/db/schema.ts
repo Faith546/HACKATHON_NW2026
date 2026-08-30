@@ -230,6 +230,7 @@ export const quotes = sqliteTable(
     currency: text("currency").notNull().default("MXN"),
     pickupDate: text("pickup_date").notNull(),
     notes: text("notes"),
+    dispatcherName: text("dispatcher_name"),
     valid: integer("valid", { mode: "boolean" }).notNull(),
     invalidReason: text("invalid_reason"),
     mandateId: text("mandate_id")
@@ -368,6 +369,10 @@ export const escalations = sqliteTable(
     contextSummary: text("context_summary").notNull(),
     humanPhone: text("human_phone"),
     twilioConferenceSid: text("twilio_conference_sid"),
+    humanParticipantCallSid: text("human_participant_call_sid"),
+    previousOperationStatus: text("previous_operation_status")
+      .notNull()
+      .default("CREATED"),
     status: text("status").notNull().default("REQUESTED"),
     createdAt: text("created_at").notNull().$defaultFn(nowIso),
     resolvedAt: text("resolved_at"),

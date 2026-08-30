@@ -34,3 +34,11 @@ export const JoinHumanSchema = z.object({
 });
 
 export type JoinHumanInput = z.infer<typeof JoinHumanSchema>;
+
+export const ResolveEscalationSchema = z.object({
+  resolutionSummary: requiredText,
+});
+
+export type ResolveEscalationInput = z.infer<
+  typeof ResolveEscalationSchema
+>;

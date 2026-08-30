@@ -5,6 +5,10 @@ import { CallsService } from "../src/modules/calls/calls.service";
 import type { VoiceCorePort } from "../src/modules/voice/voice-core.port";
 import { InMemoryRealtimeSessionRepository } from "../src/modules/realtime/realtime.repository";
 import { RealtimeService } from "../src/modules/realtime/realtime.service";
+import {
+  realtimeActorTypes,
+  realtimeModes,
+} from "../src/modules/realtime/realtime.types";
 import { InMemoryJobQueue } from "../src/shared/queue/in-memory-job-queue";
 import { ApiError } from "../src/shared/http/api-error";
 
@@ -17,7 +21,6 @@ describe("RealtimeService", () => {
       contextResolver: { resolve: async () => ({ toNumber: "+525500000001" }) },
       telephonyGateway: {
         startOutboundCall: async () => ({ providerCallId: "CA_REALTIME" }),
-        startRecording: async () => {},
       },
       createId: () => "call_realtime",
     });
@@ -116,14 +119,7 @@ describe("RealtimeService", () => {
     assert.match(call.transcript ?? "", /AGENT: Perfecto/);
     assert.equal(call.realtimeSessionId, null);
 
-    const operationsSession = await realtime.create({
-      callId: "call_realtime",
-      actorType: "INTERNAL_OPERATOR",
-      mode: "CREATE_OPERATION",
-    });
-    assert.equal(operationsSession.allowedTools.includes("startCampaign"), true);
-    assert.equal(operationsSession.allowedTools.includes("cancelOperation"), true);
-    assert.equal(operationsSession.allowedTools.includes("recordQuote"), false);
-    await realtime.close(operationsSession.id);
+    assert.equal(realtimeModes.includes("CREATE_OPERATION" as never), false);
+    assert.equal(realtimeActorTypes.includes("INTERNAL_OPERATOR" as never), false);
   });
 });

@@ -1,5 +1,8 @@
 # TEST-VOICE-00 — Preparación segura para voz real
 
+Configura explícitamente `VOICE_RUNTIME_MODE=twilio`. El valor por defecto y el
+valor recomendado fuera de esta prueba es `VOICE_RUNTIME_MODE=local`.
+
 ## Objetivo
 
 Verificar que la aplicación está realmente conectada a Twilio, OpenAI Realtime y los services deterministas antes de permitir que una persona haga llamadas o envíe SMS con costo.

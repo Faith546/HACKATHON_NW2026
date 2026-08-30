@@ -1,4 +1,8 @@
-# RELAY Twilio Integration
+# RELAY Twilio Integration (referencia histórica)
+
+> El runtime vigente no inicia grabaciones ni expone el webhook de recording.
+> Las secciones de grabación siguientes documentan experimentos históricos de
+> la rama RELAY y no describen el comportamiento desplegable actual.
 
 ## Purpose
 

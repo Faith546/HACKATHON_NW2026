@@ -51,7 +51,7 @@ class RecordingSummarySender implements CapableSummarySender {
   readonly sends: RecordingSend[] = [];
 
   constructor(
-    private readonly result: "accept" | "reject" = "accept",
+    public result: "accept" | "reject" = "accept",
     private readonly channels: Array<"SMS" | "EMAIL"> = ["SMS", "EMAIL"],
   ) {}
 
@@ -503,6 +503,27 @@ describe("Commitment summary failure behavior", () => {
       db.select().from(operations).where(eq(operations.id, fixture.operationId)).get()?.status,
       "SOURCING",
     );
+    assert.ok(
+      db
+        .select()
+        .from(auditEvents)
+        .where(eq(auditEvents.operationId, fixture.operationId))
+        .all()
+        .some((event) => event.eventType === "SUMMARY_SEND_EXHAUSTED"),
+    );
+
+    sender.result = "accept";
+    await service.enqueueSummary(commitment.id, {
+      channel: "SMS",
+      recipient: "+525555555501",
+      message: "Resumen",
+    });
+    await queue.waitForIdle();
+    assert.equal(
+      (await commitmentsRepository.getCommitment(commitment.id))?.status,
+      "VALID",
+    );
+    assert.equal(sender.sends.length, 4);
   });
 
   it("returns 422 before enqueueing a channel unsupported by the injected sender", async () => {
@@ -528,7 +549,7 @@ describe("Commitment summary failure behavior", () => {
 
     await assert.rejects(
       service.enqueueSummary(commitment.id, {
-        channel: "EMAIL",
+        channel: "EMAIL" as any,
         recipient: "ops@example.com",
         message: "Resumen",
       }),

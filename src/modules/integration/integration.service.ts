@@ -351,7 +351,7 @@ export class IntegrationService {
         ) {
           return toCommitmentResponse(commitment);
         }
-        const channel = (args.channel ?? "SMS") as "SMS" | "EMAIL";
+        const channel = "SMS" as const;
         return toCommitmentResponse(
           await this.enqueueCanonicalSummary(commitment, channel, actorId),
         );
@@ -450,7 +450,7 @@ export class IntegrationService {
 
   private async enqueueCanonicalSummary(
     commitment: CommitmentRecord,
-    channel: "SMS" | "EMAIL",
+    channel: "SMS",
     actorId: string,
   ): Promise<CommitmentRecord> {
     const operation = await this.operationsService.getOperation(
@@ -467,7 +467,7 @@ export class IntegrationService {
         { commitmentId: commitment.id },
       );
     }
-    const recipient = channel === "SMS" ? carrier.phone : carrier.email;
+    const recipient = carrier.phone;
     if (!recipient) {
       throw new ApiError(
         422,

@@ -12,6 +12,5 @@ export function createWebhooksRouter(input: {
 
   router.post("/webhooks/twilio/voice", asyncHandler(controller.receiveVoice));
   router.post("/webhooks/twilio/status", asyncHandler(controller.receiveStatus));
-  router.post("/webhooks/twilio/recordings", asyncHandler(controller.receiveRecordingStatus));
   return router;
 }

@@ -18,16 +18,6 @@ import {
 } from "./realtime.types";
 
 const toolsByMode: Record<RealtimeMode, VoiceToolName[]> = {
-  CREATE_OPERATION: [
-    "createOperation",
-    "createMandate",
-    "getOperationStatus",
-    "listCarriers",
-    "startCampaign",
-    "getQuotes",
-    "getCommitments",
-    "cancelOperation",
-  ],
   QUOTE: [
     "getOperation",
     "getActiveMandate",
@@ -125,28 +115,8 @@ export class RealtimeService {
       input.negotiationId,
       call.negotiationId,
     );
-    const agent: RealtimeAgentType =
-      input.actorType === "INTERNAL_OPERATOR"
-        ? "OPERATIONS_AGENT"
-        : "LOGISTICS_AGENT";
-    if (input.mode === "CREATE_OPERATION" && agent !== "OPERATIONS_AGENT") {
-      throw new ApiError(
-        403,
-        "REALTIME_MODE_FORBIDDEN",
-        "Sólo Operations Agent puede usar CREATE_OPERATION.",
-      );
-    }
-    if (input.mode !== "CREATE_OPERATION" && agent === "OPERATIONS_AGENT") {
-      throw new ApiError(
-        403,
-        "REALTIME_MODE_FORBIDDEN",
-        "Operations Agent no puede asumir una sesión Logistics.",
-      );
-    }
-    if (
-      agent === "LOGISTICS_AGENT" &&
-      input.mode !== modeForCallPurpose(call.purpose)
-    ) {
+    const agent: RealtimeAgentType = "LOGISTICS_AGENT";
+    if (input.mode !== modeForCallPurpose(call.purpose)) {
       throw new ApiError(
         422,
         "REALTIME_MODE_MISMATCH",
@@ -187,10 +157,9 @@ export class RealtimeService {
       return existing;
     }
 
-    const mandate =
-      input.mode === "CREATE_OPERATION"
-        ? null
-        : await this.dependencies.voiceCore.getActiveMandate(call.operationId);
+    const mandate = await this.dependencies.voiceCore.getActiveMandate(
+      call.operationId,
+    );
     const session: RealtimeSession = {
       id: this.createId(),
       callId: call.id,
@@ -348,11 +317,11 @@ export class RealtimeService {
   private async closeSession(sessionId: string): Promise<void> {
     const closeConnection = this.connectionClosers.get(sessionId);
     this.connectionClosers.delete(sessionId);
+    let connectionCloseError: unknown = null;
     try {
       await closeConnection?.();
-    } catch {
-      // Session cleanup and transcript persistence remain authoritative even
-      // if the remote transport is already gone.
+    } catch (error) {
+      connectionCloseError = error;
     }
     const session = await this.dependencies.repository.findById(sessionId);
     if (!session || session.status === "CLOSED") return;
@@ -380,6 +349,7 @@ export class RealtimeService {
     });
     await this.dependencies.repository.delete(session.id);
     this.toolExecutionsBySession.delete(session.id);
+    if (connectionCloseError) throw connectionCloseError;
   }
 
   private async requireSession(sessionId: string): Promise<RealtimeSession> {

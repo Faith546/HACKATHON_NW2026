@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
-import { auditEvents, mandates, operations } from "../../db/schema";
+import {
+  auditEvents,
+  campaigns,
+  commitments,
+  escalations,
+  mandates,
+  negotiations,
+  operations,
+} from "../../db/schema";
 import { ApiError } from "../../shared/http/api-error";
 import type { CreateMandateVersionInput } from "./mandates.types";
 
@@ -12,6 +20,12 @@ const mutableMandateOperationStatuses = new Set([
   "ESCALATED",
   "NEEDS_CARRIER",
 ]);
+const activeCampaignStatuses = [
+  "QUEUED",
+  "CALLING",
+  "COLLECTING_QUOTES",
+  "READY_TO_SELECT",
+] as const;
 
 export class MandatesRepository {
   getActiveMandate(operationId: string) {
@@ -99,6 +113,133 @@ export class MandatesRepository {
         })
         .returning()
         .get();
+
+      const invalidatedCampaigns = tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.operationId, operationId),
+            inArray(campaigns.status, [...activeCampaignStatuses]),
+          ),
+        )
+        .all();
+      if (invalidatedCampaigns.length > 0) {
+        const campaignIds = invalidatedCampaigns.map((campaign) => campaign.id);
+        tx.update(campaigns)
+          .set({ status: "FAILED", completedAt: occurredAt })
+          .where(inArray(campaigns.id, campaignIds))
+          .run();
+        tx.update(negotiations)
+          .set({ status: "REJECTED", updatedAt: occurredAt })
+          .where(inArray(negotiations.campaignId, campaignIds))
+          .run();
+        for (const campaign of invalidatedCampaigns) {
+          tx.insert(auditEvents)
+            .values({
+              id: `evt_${randomUUID()}`,
+              operationId,
+              mandateId: mandate.id,
+              eventType: "CAMPAIGN_INVALIDATED_BY_MANDATE",
+              actorType: "SYSTEM",
+              entityType: "CAMPAIGN",
+              entityId: campaign.id,
+              payloadJson: JSON.stringify({
+                previousMandateId: currentMandate.id,
+                activeMandateId: mandate.id,
+              }),
+              occurredAt,
+            })
+          .run();
+        }
+      }
+
+      const sourcingEscalation =
+        operation.status === "ESCALATED"
+          ? tx
+              .select({ id: escalations.id })
+              .from(escalations)
+              .where(
+                and(
+                  eq(escalations.operationId, operationId),
+                  eq(escalations.previousOperationStatus, "SOURCING"),
+                  inArray(escalations.status, [
+                    "REQUESTED",
+                    "DIALING_HUMAN",
+                    "HUMAN_JOINED",
+                  ]),
+                ),
+              )
+              .limit(1)
+              .get()
+          : null;
+      if (operation.status === "SOURCING" || sourcingEscalation) {
+        const staleCommitments = tx
+          .select({ id: commitments.id })
+          .from(commitments)
+          .where(
+            and(
+              eq(commitments.operationId, operationId),
+              inArray(commitments.status, [
+                "PROPOSED",
+                "VERBALLY_AGREED",
+                "MANDATE_VALIDATED",
+                "SUMMARY_PENDING",
+                "SUMMARY_SENT",
+                "VALID",
+              ]),
+            ),
+          )
+          .all();
+        if (staleCommitments.length > 0) {
+          tx.update(commitments)
+            .set({ status: "CANCELLED", updatedAt: occurredAt })
+            .where(
+              inArray(
+                commitments.id,
+                staleCommitments.map((commitment) => commitment.id),
+              ),
+            )
+            .run();
+          tx.insert(auditEvents)
+            .values({
+              id: `evt_${randomUUID()}`,
+              operationId,
+              mandateId: mandate.id,
+              eventType: "COMMITMENTS_INVALIDATED_BY_MANDATE",
+              actorType: "SYSTEM",
+              entityType: "MANDATE",
+              entityId: mandate.id,
+              payloadJson: JSON.stringify({
+                commitmentIds: staleCommitments.map(
+                  (commitment) => commitment.id,
+                ),
+                previousMandateId: currentMandate.id,
+              }),
+              occurredAt,
+            })
+            .run();
+        }
+        if (operation.status === "ESCALATED") {
+          tx.update(escalations)
+            .set({ previousOperationStatus: "NEEDS_RENEGOTIATION" })
+            .where(eq(escalations.id, sourcingEscalation!.id))
+            .run();
+          tx.update(operations)
+            .set({ selectedCarrierId: null, updatedAt: occurredAt })
+            .where(eq(operations.id, operationId))
+            .run();
+        } else {
+          tx.update(operations)
+            .set({
+              status: "NEEDS_RENEGOTIATION",
+              selectedCarrierId: null,
+              updatedAt: occurredAt,
+            })
+            .where(eq(operations.id, operationId))
+            .run();
+        }
+      }
 
       tx.update(operations)
         .set({ updatedAt: occurredAt })

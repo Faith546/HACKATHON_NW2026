@@ -20,9 +20,14 @@ export function createEscalationsRouter(
 ): Router {
   const router = Router({ mergeParams: true });
   const controller = new EscalationsController(service);
+  router.get("/:escalationId", asyncHandler(controller.get));
   router.post(
     "/:escalationId/join-human",
     asyncHandler(controller.joinHuman),
+  );
+  router.post(
+    "/:escalationId/resolve",
+    asyncHandler(controller.resolve),
   );
   return router;
 }

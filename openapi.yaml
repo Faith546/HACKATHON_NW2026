@@ -555,7 +555,7 @@ paths:
       tags: [Commitments]
       operationId: enqueueCommitmentSummary
       summary: Enviar el recap escrito y finalizar el commitment
-      description: Agrega un job a la cola en memoria. El commitment solo pasa a VALID cuando el proveedor acepta el envío.
+      description: Agrega un job SMS a la cola en memoria. El commitment solo pasa a VALID cuando el proveedor acepta el envío. Repetir la misma solicitud reencola de forma idempotente un recap agotado.
       requestBody:
         required: true
         content:
@@ -658,6 +658,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Escalation"
+
+  /escalations/{escalationId}:
+    parameters:
+      - $ref: "#/components/parameters/EscalationId"
+    get:
+      tags: [Escalations]
+      operationId: getEscalation
+      summary: Consultar el estado de una escalación asíncrona
+      responses:
+        "200":
+          description: Escalación encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Escalation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /escalations/{escalationId}/resolve:
+    parameters:
+      - $ref: "#/components/parameters/EscalationId"
+    post:
+      tags: [Escalations]
+      operationId: resolveEscalation
+      summary: Cerrar la escalación y restaurar el flujo de la operación
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveEscalationRequest"
+      responses:
+        "200":
+          description: Escalación resuelta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Escalation"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /operations/{operationId}/pickup/confirm:
     parameters:
@@ -1115,6 +1155,10 @@ components:
           enum: [QUEUED, RINGING, IN_PROGRESS, COMPLETED, BUSY, NO_ANSWER, FAILED]
         transcript:
           type: [string, "null"]
+        brief:
+          oneOf:
+            - $ref: "#/components/schemas/CallBrief"
+            - type: "null"
         startedAt:
           type: [string, "null"]
           format: date-time
@@ -1171,7 +1215,7 @@ components:
           type: string
         actorType:
           type: string
-          enum: [INTERNAL_OPERATOR, CARRIER, DISPATCHER, DRIVER]
+          enum: [CARRIER, DISPATCHER, DRIVER]
         carrierId:
           type: [string, "null"]
         operationId:
@@ -1180,7 +1224,7 @@ components:
           type: [string, "null"]
         mode:
           type: string
-          enum: [CREATE_OPERATION, QUOTE, COMMIT, EXECUTION, INCIDENT, DELIVERY]
+          enum: [QUOTE, COMMIT, EXECUTION, INCIDENT, DELIVERY]
 
     RealtimeSession:
       type: object
@@ -1193,7 +1237,7 @@ components:
           type: string
         agent:
           type: string
-          enum: [OPERATIONS_AGENT, LOGISTICS_AGENT]
+          enum: [LOGISTICS_AGENT]
         mode:
           type: string
         mandateId:
@@ -1270,7 +1314,7 @@ components:
           example: false
         code:
           type: string
-          enum: [ALLOWED, PRICE_EXCEEDS_MANDATE, DATE_OUTSIDE_MANDATE]
+          enum: [ALLOWED, CURRENCY_MISMATCH, PRICE_EXCEEDS_MANDATE, DATE_OUTSIDE_MANDATE]
         mandateId:
           type: string
           example: man_01JABC123
@@ -1446,7 +1490,7 @@ components:
       properties:
         channel:
           type: string
-          enum: [SMS, EMAIL]
+          enum: [SMS]
         recipient:
           type: string
           example: "+525555555501"
@@ -1526,9 +1570,27 @@ components:
         status:
           type: string
           enum: [REQUESTED, DIALING_HUMAN, HUMAN_JOINED, RESOLVED, FAILED]
+        humanPhone:
+          type: [string, "null"]
+        twilioConferenceSid:
+          type: [string, "null"]
+        humanParticipantCallSid:
+          type: [string, "null"]
+        previousOperationStatus:
+          type: string
+        resolvedAt:
+          type: [string, "null"]
+          format: date-time
         createdAt:
           type: string
           format: date-time
+
+    ResolveEscalationRequest:
+      type: object
+      required: [resolutionSummary]
+      properties:
+        resolutionSummary:
+          type: string
 
     ConfirmExecutionEventRequest:
       type: object

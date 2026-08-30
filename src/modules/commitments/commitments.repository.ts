@@ -300,7 +300,7 @@ export class CommitmentsRepository {
         );
 
         return commitment;
-      });
+      }, { behavior: "immediate" });
     } catch (error) {
       if (error instanceof ApiError) throw error;
       if (isSqliteUniqueViolation(error)) {
@@ -529,7 +529,7 @@ export class CommitmentsRepository {
       );
 
       return validated;
-    });
+    }, { behavior: "immediate" });
   }
 
   async attachEvidence(
@@ -656,7 +656,7 @@ export class CommitmentsRepository {
         occurredAt,
       );
       return updated;
-    });
+    }, { behavior: "immediate" });
   }
 
   async markSummaryPending(
@@ -677,6 +677,37 @@ export class CommitmentsRepository {
           "RESOURCE_NOT_FOUND",
           "Commitment no encontrado.",
         );
+      }
+      if (commitment.status === "VALID" || commitment.status === "SUMMARY_SENT") {
+        return commitment;
+      }
+      if (commitment.status === "SUMMARY_PENDING") {
+        if (
+          commitment.summaryChannel !== input.channel ||
+          commitment.summaryRecipient !== input.recipient ||
+          commitment.summaryMessage !== input.message
+        ) {
+          throw new ApiError(
+            409,
+            "SUMMARY_RETRY_MISMATCH",
+            "Un retry debe conservar el mismo canal, destinatario y mensaje.",
+          );
+        }
+        this.insertAudit(
+          tx,
+          {
+            operationId: commitment.operationId,
+            mandateId: commitment.mandateId,
+            eventType: "SUMMARY_RETRY_QUEUED",
+            actorType: "LOGISTICS_AGENT",
+            actorId,
+            callId: commitment.verbalAgreementCallId ?? undefined,
+            entityId: commitment.id,
+            payload: { channel: input.channel, recipient: input.recipient },
+          },
+          occurredAt,
+        );
+        return commitment;
       }
       if (commitment.status !== "MANDATE_VALIDATED") {
         throw new ApiError(
@@ -764,7 +795,7 @@ export class CommitmentsRepository {
         occurredAt,
       );
       return pending;
-    });
+    }, { behavior: "immediate" });
   }
 
   async validateSummaryDispatch(
@@ -820,6 +851,37 @@ export class CommitmentsRepository {
       }
       return commitment;
     });
+  }
+
+  async markSummaryExhausted(
+    commitmentId: string,
+    error: unknown,
+  ): Promise<void> {
+    const occurredAt = this.now().toISOString();
+    await this.database.transaction((tx) => {
+      const commitment = tx
+        .select()
+        .from(commitments)
+        .where(eq(commitments.id, commitmentId))
+        .get();
+      if (!commitment || commitment.status !== "SUMMARY_PENDING") return;
+      this.insertAudit(
+        tx,
+        {
+          operationId: commitment.operationId,
+          mandateId: commitment.mandateId,
+          eventType: "SUMMARY_SEND_EXHAUSTED",
+          actorType: "SYSTEM",
+          callId: commitment.verbalAgreementCallId ?? undefined,
+          entityId: commitment.id,
+          payload: {
+            message: error instanceof Error ? error.message : String(error),
+            retryable: true,
+          },
+        },
+        occurredAt,
+      );
+    }, { behavior: "immediate" });
   }
 
   async markSummarySent(
@@ -887,7 +949,7 @@ export class CommitmentsRepository {
         occurredAt,
       );
       return sent;
-    });
+    }, { behavior: "immediate" });
   }
 
   async markValid(commitmentId: string): Promise<CommitmentRecord> {
@@ -969,7 +1031,7 @@ export class CommitmentsRepository {
         occurredAt,
       );
       return valid;
-    });
+    }, { behavior: "immediate" });
   }
 
   // Compatibility facade methods used by IntegrationService.

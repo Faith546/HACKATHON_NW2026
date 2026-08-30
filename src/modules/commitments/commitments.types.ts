@@ -40,7 +40,7 @@ export type AttachEvidenceInput = z.infer<typeof AttachEvidenceSchema>;
 
 export const SendSummarySchema = z
   .object({
-    channel: z.enum(["SMS", "EMAIL"]),
+    channel: z.literal("SMS"),
     recipient: requiredText,
     message: requiredText,
   })

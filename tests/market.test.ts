@@ -6,7 +6,12 @@ import type { AddressInfo } from "node:net";
 import { eq } from "drizzle-orm";
 import { createApp } from "../src/app";
 import { db } from "../src/db";
-import { campaigns, negotiations, operations } from "../src/db/schema";
+import {
+  campaigns,
+  negotiations,
+  operations,
+  quotes as quoteTable,
+} from "../src/db/schema";
 import { campaignsService } from "../src/modules/campaigns/campaigns.service";
 
 describe("Market Engine OpenAPI contract", () => {
@@ -39,6 +44,18 @@ describe("Market Engine OpenAPI contract", () => {
     assert.equal(wrongDateResponse.status, 200);
     assert.equal(wrongDate.allowed, false);
     assert.equal(wrongDate.code, "DATE_OUTSIDE_MANDATE");
+
+    const wrongCurrencyResponse = await fetch(
+      `${baseUrl}/api/v1/negotiations/${context.negotiationIds[0]}/offers/evaluate`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...offer(8_000), currency: "USD" }),
+      },
+    );
+    const wrongCurrency = await wrongCurrencyResponse.json();
+    assert.equal(wrongCurrencyResponse.status, 200);
+    assert.equal(wrongCurrency.code, "CURRENCY_MISMATCH");
 
     const evaluateResponse = await fetch(
       `${baseUrl}/api/v1/negotiations/${context.negotiationIds[0]}/offers/evaluate`,
@@ -85,6 +102,20 @@ describe("Market Engine OpenAPI contract", () => {
     assert.equal(listResponse.status, 200);
     assert.equal(listed.length, 3);
     assert.ok(listed.every((quote: object) => !("totalPriceCents" in quote)));
+    assert.ok(
+      listed.every(
+        (quote: { dispatcherName: string }) =>
+          quote.dispatcherName === "Dispatcher Contract",
+      ),
+    );
+    assert.equal(
+      db
+        .select({ dispatcherName: quoteTable.dispatcherName })
+        .from(quoteTable)
+        .where(eq(quoteTable.id, first.id))
+        .get()?.dispatcherName,
+      "Dispatcher Contract",
+    );
 
     const selectResponse = await fetch(
       `${baseUrl}/api/v1/operations/${context.operation.id}/market/selection`,
@@ -131,6 +162,37 @@ describe("Market Engine OpenAPI contract", () => {
         .filter((row) => row.id !== context.negotiationIds[0])
         .every((row) => row.status === "REJECTED"),
     );
+
+    const mandateV2Response = await fetch(
+      `${baseUrl}/api/v1/operations/${context.operation.id}/mandates/versions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          maxTotalPrice: 9_500,
+          currency: "MXN",
+          pickupDate: "2026-09-03",
+        }),
+      },
+    );
+    assert.equal(mandateV2Response.status, 201);
+    assert.equal(
+      db
+        .select({ status: operations.status })
+        .from(operations)
+        .where(eq(operations.id, context.operation.id))
+        .get()?.status,
+      "NEEDS_RENEGOTIATION",
+    );
+    const restartedCampaign = await fetch(
+      `${baseUrl}/api/v1/operations/${context.operation.id}/campaigns`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ carrierIds: context.carrierIds }),
+      },
+    );
+    assert.equal(restartedCampaign.status, 202, await restartedCampaign.text());
   });
 
   it("implements BALANCED_SCORE with a documented deterministic formula", async () => {
@@ -182,12 +244,14 @@ describe("Market Engine OpenAPI contract", () => {
     );
     const error = await response.json();
     assert.equal(response.status, 409);
-    assert.equal(error.code, "NO_ELIGIBLE_QUOTES");
-    assert.ok(
-      error.details.excludedQuotes.every((item: { reasons: string[] }) =>
-        item.reasons.includes("STALE_MANDATE"),
-      ),
+    assert.equal(error.code, "MARKET_SELECTION_NOT_ALLOWED");
+    assert.equal(error.details.operationStatus, "NEEDS_RENEGOTIATION");
+
+    const campaignResponse = await fetch(
+      `${baseUrl}/api/v1/operations/${context.operation.id}/campaigns/${context.campaignId}`,
     );
+    const campaign = await campaignResponse.json();
+    assert.equal(campaign.status, "FAILED");
   });
 
   it("never selects an expired quote", async () => {
@@ -215,6 +279,32 @@ describe("Market Engine OpenAPI contract", () => {
     assert.equal(response.status, 409);
     assert.equal(error.code, "NO_ELIGIBLE_QUOTES");
     assert.ok(error.details.excludedQuotes[0].reasons.includes("QUOTE_EXPIRED"));
+
+    assert.equal(
+      db
+        .select({ status: campaigns.status })
+        .from(campaigns)
+        .where(eq(campaigns.id, context.campaignId))
+        .get()?.status,
+      "FAILED",
+    );
+    assert.equal(
+      db
+        .select({ status: operations.status })
+        .from(operations)
+        .where(eq(operations.id, context.operation.id))
+        .get()?.status,
+      "NEEDS_CARRIER",
+    );
+    const restartResponse = await fetch(
+      `${baseUrl}/api/v1/operations/${context.operation.id}/campaigns`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ carrierIds: context.carrierIds }),
+      },
+    );
+    assert.equal(restartResponse.status, 202, await restartResponse.text());
   });
 });
 

@@ -40,9 +40,6 @@ class FakeTelephonyGateway implements TelephonyGateway {
   ): Promise<{ providerCallId: string }> {
     return { providerCallId: `CA_fake_${input.callId}` };
   }
-  async startRecording(providerCallId: string): Promise<void> {
-    // Fake implementation
-  }
 }
 
 class LocalFallbackVoiceCore implements VoiceCorePort {

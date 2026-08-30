@@ -9,22 +9,10 @@ import { createMediaStreamTwiml } from "./twilio-twiml";
 type TwilioClient = ReturnType<typeof twilio>;
 type TwilioCreateCallInput = Parameters<TwilioClient["calls"]["create"]>[0];
 
-type RecordingCreateOptions = {
-  recordingStatusCallback: string;
-  recordingStatusCallbackMethod: "POST";
-  recordingStatusCallbackEvent: string[];
-  recordingTrack: "both";
-  trim: "do-not-trim";
-};
-
 export interface TwilioCallsClient {
   calls: {
     create(input: TwilioCreateCallInput): Promise<{ sid: string }>;
-  } & ((callId: string) => {
-    recordings: {
-      create(options: RecordingCreateOptions): Promise<{ sid: string }>;
-    };
-  });
+  };
 }
 
 export interface TwilioTelephonyConfig {
@@ -122,23 +110,4 @@ export class TwilioTelephonyGateway implements TelephonyGateway {
     return { providerCallId: providerCall.sid };
   }
 
-  async startRecording(providerCallId: string): Promise<void> {
-    const baseUrl = secureUrl(
-      this.config.publicBaseUrl,
-      "https:",
-      "PUBLIC_BASE_URL",
-    );
-    
-    const recordingStatusCallback = new URL("/api/v1/webhooks/twilio/recordings", baseUrl);
-    
-    await this.client.calls(providerCallId).recordings.create({
-      recordingStatusCallback: recordingStatusCallback.toString(),
-      recordingStatusCallbackMethod: "POST",
-      recordingStatusCallbackEvent: ["in-progress", "completed", "absent"],
-      recordingTrack: "both",
-      trim: "do-not-trim",
-    });
-    
-    console.info(`[RECORDING] start requested\\nCallSid: ${providerCallId}`);
-  }
 }

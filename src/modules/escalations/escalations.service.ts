@@ -9,6 +9,7 @@ import {
 import type {
   JoinHumanInput,
   RequestEscalationInput,
+  ResolveEscalationInput,
 } from "./escalations.types";
 import {
   TwilioHumanConferenceGateway,
@@ -27,6 +28,8 @@ export interface EscalationJobQueue {
 }
 
 export class EscalationsService {
+  private readonly activeJoinJobs = new Set<string>();
+
   constructor(
     private readonly repository: EscalationsRepository,
     private readonly queue: EscalationJobQueue,
@@ -51,6 +54,10 @@ export class EscalationsService {
       input,
       actorId,
     );
+    if (context.alreadyQueued && this.activeJoinJobs.has(escalationId)) {
+      return context.escalation;
+    }
+    this.activeJoinJobs.add(escalationId);
     let gatewayResult: JoinHumanConferenceResult | null = null;
 
     this.queue.enqueue({
@@ -60,9 +67,11 @@ export class EscalationsService {
         gatewayResult ??=
           await this.conferenceGateway.joinHuman(context.gatewayInput);
         this.repository.markHumanJoined(escalationId, gatewayResult);
+        this.activeJoinJobs.delete(escalationId);
       },
       onExhausted: (error) => {
         this.repository.markHumanJoinFailed(escalationId, error);
+        this.activeJoinJobs.delete(escalationId);
       },
     });
 
@@ -71,6 +80,14 @@ export class EscalationsService {
 
   getEscalation(escalationId: string): EscalationRecord | null {
     return this.repository.findById(escalationId);
+  }
+
+  resolveEscalation(
+    escalationId: string,
+    input: ResolveEscalationInput,
+    actorId?: string,
+  ): EscalationRecord {
+    return this.repository.resolve(escalationId, input, actorId);
   }
 }
 

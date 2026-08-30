@@ -4,6 +4,7 @@ import type { EscalationsService } from "./escalations.service";
 import {
   JoinHumanSchema,
   RequestEscalationSchema,
+  ResolveEscalationSchema,
 } from "./escalations.types";
 
 export class EscalationsController {
@@ -48,6 +49,34 @@ export class EscalationsController {
       actorIdFrom(request),
     );
     response.status(202).json(escalation);
+  };
+
+  get = async (request: Request, response: Response): Promise<void> => {
+    const escalation = this.service.getEscalation(
+      String(request.params.escalationId),
+    );
+    if (!escalation) {
+      throw new ApiError(404, "RESOURCE_NOT_FOUND", "La escalación no existe.");
+    }
+    response.status(200).json(escalation);
+  };
+
+  resolve = async (request: Request, response: Response): Promise<void> => {
+    const parsed = ResolveEscalationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw new ApiError(
+        422,
+        "VALIDATION_ERROR",
+        "La resolución de la escalación no es válida.",
+        parsed.error.format(),
+      );
+    }
+    const escalation = this.service.resolveEscalation(
+      String(request.params.escalationId),
+      parsed.data,
+      actorIdFrom(request),
+    );
+    response.status(200).json(escalation);
   };
 }
 

@@ -25,7 +25,6 @@ describe("Twilio webhooks", () => {
       contextResolver: { resolve: async () => ({ toNumber: "+525500000001" }) },
       telephonyGateway: {
         startOutboundCall: async () => ({ providerCallId: "CA_OUTBOUND" }),
-        startRecording: async () => {},
       },
       auditWriter: new AuditWriter({
         insert: (event) => {
@@ -114,7 +113,6 @@ describe("Twilio webhooks", () => {
       contextResolver: { resolve: async () => ({ toNumber: null }) },
       telephonyGateway: {
         startOutboundCall: async () => ({ providerCallId: "unused" }),
-        startRecording: async () => {},
       },
     });
     const webhooks = new WebhooksService({
