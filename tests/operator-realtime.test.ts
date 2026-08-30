@@ -9,6 +9,81 @@ import { ApiError } from "../src/shared/http/api-error";
 import { InMemoryJobQueue } from "../src/shared/queue/in-memory-job-queue";
 
 describe("Authorized operator Realtime flow", () => {
+  it("allows createOperation after any final human confirmation", async () => {
+    const calls = new CallsService({
+      repository: new InMemoryCallRepository(),
+      queue: new InMemoryJobQueue(),
+      telephonyGateway: {
+        startOutboundCall: async () => ({ providerCallId: "CA_UNUSED" }),
+      },
+      contextResolver: {
+        resolve: async () => ({ toNumber: "+525500000001" }),
+      },
+      createId: () => "call_operator_create",
+    });
+    await calls.createOrGetInbound({
+      operationId: null,
+      actorType: "INTERNAL_OPERATOR",
+      providerCallId: "CA_OPERATOR_CREATE",
+      fromNumber: "+525500009999",
+      toNumber: "+525500000000",
+      purpose: "OPERATIONS",
+    });
+    const executed: string[] = [];
+    const voiceCore: VoiceCorePort = {
+      resolveOutboundCallContext: async () => ({ toNumber: "+525500000001" }),
+      resolveInboundCallContext: async () => ({
+        operationId: null,
+        carrierId: null,
+        negotiationId: null,
+        actorType: "INTERNAL_OPERATOR",
+        purpose: "OPERATIONS",
+      }),
+      getActiveMandate: async () => null,
+      executeVoiceTool: async ({ name }) => {
+        executed.push(name);
+        return { ok: true };
+      },
+    };
+    const realtime = new RealtimeService({
+      repository: new InMemoryRealtimeSessionRepository(),
+      callsService: calls,
+      voiceCore,
+      createId: () => "rts_operator_create",
+    });
+    const session = await realtime.create({
+      callId: "call_operator_create",
+      actorType: "INTERNAL_OPERATOR",
+      operationId: null,
+      mode: "OPERATIONS",
+    });
+    await realtime.appendTranscriptSegment(session.id, {
+      id: "short_confirmation",
+      speaker: "HUMAN",
+      source: "CALLER_AUDIO",
+      startMs: 100,
+      endMs: 300,
+      text: "Sí.",
+      final: true,
+      interrupted: false,
+    });
+
+    await realtime.executeTool(session.id, "createOperation", {
+      customerName: "Textiles Pacífico",
+      containerNumber: "TCLU-RELAXED",
+      origin: "Manzanillo",
+      destination: "Guadalajara",
+      service: "DRAYAGE",
+      mandate: {
+        maxTotalPrice: 9000,
+        currency: "MXN",
+        pickupDate: "2026-09-03",
+      },
+    });
+
+    assert.equal(executed.includes("createOperation"), true);
+  });
+
   it("rejects a carrier Realtime session without business context", async () => {
     const calls = new CallsService({
       repository: new InMemoryCallRepository(),

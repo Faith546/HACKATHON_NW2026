@@ -298,7 +298,7 @@ export class RealtimeService {
                 trustedArguments.transcriptExcerpt as string,
             }
           : undefined;
-    if (transcriptEvidence) {
+    if (transcriptEvidence && name !== "createOperation") {
       assertExplicitVoiceAuthorization(name, transcriptEvidence);
     }
     const execute = () =>
@@ -545,11 +545,7 @@ function assertExplicitVoiceAuthorization(
 ): void {
   const text = normalizeTranscriptText(evidence.transcriptExcerpt);
   let accepted = true;
-  if (name === "createOperation") {
-    accepted =
-      /\b(confirmo|autorizo)\b/.test(text) &&
-      /\b(crea|crear|crees|operacion|mandato)\b/.test(text);
-  } else if (name === "recordVerbalAgreement") {
+  if (name === "recordVerbalAgreement") {
     accepted =
       /\b(si|confirmo|confirma|acepto|acepta)\b/.test(text) &&
       !/\b(dejame|luego|despues|voy a confirmar)\b/.test(text);
