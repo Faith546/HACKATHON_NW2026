@@ -482,26 +482,20 @@ describe("Escalations endpoints and Twilio conference gateway", () => {
     sqlite.close();
   });
 
-  it("redirects the live carrier leg into Twilio Conference without hanging it up", async () => {
+  it("dials the human first and redirects only the requesting carrier after the human answers", async () => {
     const callsMade: Array<Record<string, unknown>> = [];
-    let lookupCount = 0;
-    let participantCallSid: string | null = null;
     const api: TwilioConferenceApi = {
       redirectCall: async (callSid, twiml) => {
         callsMade.push({ action: "redirect", callSid, twiml });
       },
       findActiveConference: async (friendlyName) => {
         callsMade.push({ action: "find", friendlyName });
-        lookupCount += 1;
-        return lookupCount === 1 ? null : { sid: "CF_REAL" };
+        return null;
       },
-      addParticipant: async (conferenceSid, input) => {
-        callsMade.push({ action: "participant", conferenceSid, ...input });
-        participantCallSid = "CA_HUMAN";
-        return { callSid: participantCallSid };
+      addParticipant: async (conferenceReference, input) => {
+        callsMade.push({ action: "participant", conferenceReference, ...input });
+        return { callSid: "CA_HUMAN", conferenceSid: "CF_REAL" };
       },
-      findParticipantByLabel: async () =>
-        participantCallSid ? { callSid: participantCallSid } : null,
       getCallStatus: async (callSid) => {
         callsMade.push({ action: "participant-status", callSid });
         return "in-progress";
@@ -534,6 +528,14 @@ describe("Escalations endpoints and Twilio conference gateway", () => {
     assert.match(String(redirect?.twiml), /<Conference/);
     assert.match(String(redirect?.twiml), /record="do-not-record"/);
     assert.doesNotMatch(String(redirect?.twiml), /<Hangup/);
+    assert.ok(
+      callsMade.findIndex((call) => call.action === "participant") <
+        callsMade.findIndex((call) => call.action === "participant-status"),
+    );
+    assert.ok(
+      callsMade.findIndex((call) => call.action === "participant-status") <
+        callsMade.findIndex((call) => call.action === "redirect"),
+    );
 
     const retried = await gateway.joinHuman({
       escalationId: "esc_twilio",
@@ -551,6 +553,48 @@ describe("Escalations endpoints and Twilio conference gateway", () => {
       callsMade.filter((call) => call.action === "participant").length,
       1,
     );
+  });
+
+  it("keeps the carrier with Relay when the human does not answer", async () => {
+    const callsMade: string[] = [];
+    const api: TwilioConferenceApi = {
+      redirectCall: async () => {
+        callsMade.push("redirect");
+      },
+      findActiveConference: async () => null,
+      addParticipant: async () => {
+        callsMade.push("participant");
+        return { callSid: "CA_HUMAN_NO_ANSWER", conferenceSid: "CF_WAITING" };
+      },
+      getCallStatus: async () => {
+        callsMade.push("no-answer");
+        return "no-answer";
+      },
+    };
+    const gateway = new TwilioHumanConferenceGateway(
+      {
+        fromNumber: "+525555555500",
+        discoveryIntervalMs: 0,
+        participantAnswerAttempts: 1,
+        wait: async () => undefined,
+      },
+      api,
+    );
+
+    await assert.rejects(
+      gateway.joinHuman({
+        escalationId: "esc_no_answer",
+        operationId: "op_no_answer",
+        callId: "call_no_answer",
+        providerCallId: "CA_CARRIER_STAYS_WITH_RELAY",
+        humanPhone: "+525555555501",
+      }),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "HUMAN_DID_NOT_JOIN",
+    );
+    assert.deepEqual(callsMade, ["participant", "no-answer"]);
   });
 });
 
