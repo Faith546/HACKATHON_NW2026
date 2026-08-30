@@ -1,6 +1,6 @@
 import { db } from "../../db";
-import { campaigns, operations } from "../../db/schema";
-import { desc, eq } from "drizzle-orm";
+import { auditEvents, campaigns, operations } from "../../db/schema";
+import { and, desc, eq, inArray, like } from "drizzle-orm";
 import { ApiError } from "../../shared/http/api-error";
 import type { CallsService } from "../calls/calls.service";
 import type {
@@ -488,12 +488,27 @@ export class IntegrationService {
    */
   async recoverAutonomousFlows(): Promise<void> {
     const operationRows = db
-      .select({ id: operations.id })
+      .selectDistinct({ id: operations.id, status: operations.status })
       .from(operations)
-      .where(eq(operations.status, "SOURCING"))
+      .innerJoin(
+        auditEvents,
+        and(
+          eq(auditEvents.operationId, operations.id),
+          eq(auditEvents.eventType, "OPERATION_CREATED"),
+          like(auditEvents.actorId, "voice:%"),
+        ),
+      )
+      .where(inArray(operations.status, ["CREATED", "SOURCING"]))
       .all();
     for (const operation of operationRows) {
-      await this.advanceAutonomousFlow(operation.id);
+      if (operation.status === "CREATED") {
+        await this.startAutomaticCampaign(
+          operation.id,
+          "system:autonomous-recovery",
+        );
+      } else {
+        await this.advanceAutonomousFlow(operation.id);
+      }
     }
   }
 
@@ -560,8 +575,8 @@ export class IntegrationService {
       try {
         operation = await this.operationsService.createOperation(input, actorId);
       } catch (createError) {
-        // A concurrent Realtime retry can win the unique container insert.
-        // Resolve it and verify the complete command before reusing it.
+        // A concurrent process can create the same command first. Resolve it
+        // and verify the complete command before reusing it.
         try {
           operation = await this.operationsService.resolveOperationReference({
             containerNumber: input.containerNumber,
@@ -587,30 +602,37 @@ export class IntegrationService {
         )
       : null;
     if (!campaign) {
-      const activeCarriers = (await this.carriersService.listCarriers()).filter(
-        (carrier) => carrier.active,
-      );
-      if (activeCarriers.length !== 3) {
-        throw new ApiError(
-          409,
-          "AUTONOMOUS_CAMPAIGN_REQUIRES_EXACTLY_THREE_CARRIERS",
-          "La campaña automática requiere exactamente tres carriers activos.",
-          { activeCarrierIds: activeCarriers.map((carrier) => carrier.id) },
-        );
-      }
-      campaign = await this.campaignsService.startCampaign(
-        operation.id,
-        {
-          carrierIds: activeCarriers.map((carrier) => carrier.id),
-          maxParallelCalls: 3,
-        },
-        actorId,
-      );
+      campaign = await this.startAutomaticCampaign(operation.id, actorId);
     }
     return {
       operation: await this.operationsService.getOperation(operation.id),
       campaign,
     };
+  }
+
+  private async startAutomaticCampaign(
+    operationId: string,
+    actorId: string,
+  ) {
+    const activeCarriers = (await this.carriersService.listCarriers()).filter(
+      (carrier) => carrier.active,
+    );
+    if (activeCarriers.length !== 3) {
+      throw new ApiError(
+        409,
+        "AUTONOMOUS_CAMPAIGN_REQUIRES_EXACTLY_THREE_CARRIERS",
+        "La campaña automática requiere exactamente tres carriers activos.",
+        { activeCarrierIds: activeCarriers.map((carrier) => carrier.id) },
+      );
+    }
+    return this.campaignsService.startCampaign(
+      operationId,
+      {
+        carrierIds: activeCarriers.map((carrier) => carrier.id),
+        maxParallelCalls: 3,
+      },
+      actorId,
+    );
   }
 
   private async advanceAutonomousFlowOnce(
