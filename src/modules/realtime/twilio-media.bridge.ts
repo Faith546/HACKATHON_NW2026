@@ -14,7 +14,7 @@ import type { CallsService } from "../calls/calls.service";
 import type { VoiceToolName } from "../voice/voice-core.port";
 import {
   voiceToolDescriptions,
-  voiceToolSchemas,
+  voiceToolParameterSchemas,
 } from "../voice/voice-tools";
 import {
   modeForCallPurpose,
@@ -396,7 +396,7 @@ function createRealtimeAgent(
     tool({
       name,
       description: voiceToolDescriptions[name],
-      parameters: voiceToolSchemas[name] as z.ZodType<Record<string, unknown>>,
+      parameters: voiceToolParameterSchemas[name] as z.ZodType<Record<string, unknown>>,
       execute: async (argumentsValue) => {
         await beforeToolExecution();
         return service.executeTool(

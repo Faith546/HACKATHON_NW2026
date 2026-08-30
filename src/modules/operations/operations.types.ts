@@ -26,10 +26,12 @@ export const isoDateSchema = z.string().refine(
   { message: "Debe ser una fecha válida en formato YYYY-MM-DD." },
 );
 
-export const currencySchema = z
+export const currencyInputSchema = z
   .string()
   .trim()
-  .min(1)
+  .min(1);
+
+export const currencySchema = currencyInputSchema
   .transform((value) => value.toUpperCase());
 
 export const moneySchema = z

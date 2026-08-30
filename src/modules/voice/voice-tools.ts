@@ -18,6 +18,7 @@ import {
   CancelOperationSchema,
   CreateMandateInputSchema,
   CreateOperationSchema,
+  currencyInputSchema,
 } from "../operations/operations.types";
 import type { VoiceToolName } from "./voice-core.port";
 
@@ -98,6 +99,24 @@ export const voiceToolSchemas = {
     actions: z.array(z.string()),
     nextSteps: z.array(z.string()).optional(),
   }).strict(),
+} satisfies Record<VoiceToolName, z.ZodType>;
+
+const voiceMandateParametersSchema = CreateMandateInputSchema.extend({
+  currency: currencyInputSchema,
+}).strict();
+
+export const voiceToolParameterSchemas = {
+  ...voiceToolSchemas,
+  createOperation: CreateOperationSchema.extend({
+    mandate: voiceMandateParametersSchema,
+  }).strict(),
+  createMandate: voiceMandateParametersSchema,
+  evaluateOffer: EvaluateQuoteSchema.extend({
+    currency: currencyInputSchema,
+  }).strict(),
+  recordQuote: SaveQuoteSchema.omit({ callId: true })
+    .extend({ currency: currencyInputSchema })
+    .strict(),
 } satisfies Record<VoiceToolName, z.ZodType>;
 
 export const voiceToolDescriptions: Record<VoiceToolName, string> = {
