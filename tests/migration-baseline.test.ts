@@ -30,11 +30,17 @@ describe("SQLite migration baseline", () => {
       );
       INSERT INTO operations (
         id, customer_name, container_number, origin, destination,
-        created_at, updated_at
+        status, selected_carrier_id, created_at, updated_at
       ) VALUES (
         'op_migration', 'Customer migration', 'CONT-MIGRATION',
-        'Origen', 'Destino',
+        'Origen', 'Destino', 'BOOKED', 'car_migration',
         '2026-08-29T00:00:00.000Z', '2026-08-29T00:00:00.000Z'
+      );
+      INSERT INTO mandates (
+        id, operation_id, version, max_total_price_cents, pickup_date, created_at
+      ) VALUES (
+        'man_migration', 'op_migration', 1, 900000, '2026-09-03',
+        '2026-08-29T00:00:00.000Z'
       );
       INSERT INTO campaigns (
         id, operation_id, requested_carriers, created_at
@@ -45,6 +51,22 @@ describe("SQLite migration baseline", () => {
         id, operation_id, campaign_id, carrier_id, created_at, updated_at
       ) VALUES (
         'neg_migration', 'op_migration', 'cmp_migration', 'car_migration',
+        '2026-08-29T00:00:00.000Z', '2026-08-29T00:00:00.000Z'
+      );
+      INSERT INTO quotes (
+        id, operation_id, negotiation_id, carrier_id, total_price_cents,
+        pickup_date, valid, mandate_id, valid_until, created_at
+      ) VALUES (
+        'quo_migration', 'op_migration', 'neg_migration', 'car_migration',
+        850000, '2026-09-03', 1, 'man_migration',
+        '2026-09-01T00:00:00.000Z', '2026-08-29T00:00:00.000Z'
+      );
+      INSERT INTO commitments (
+        id, operation_id, quote_id, carrier_id, mandate_id,
+        total_price_cents, pickup_date, created_at, updated_at
+      ) VALUES (
+        'com_migration', 'op_migration', 'quo_migration', 'car_migration',
+        'man_migration', 850000, '2026-09-03',
         '2026-08-29T00:00:00.000Z', '2026-08-29T00:00:00.000Z'
       );
     `);
@@ -71,12 +93,23 @@ describe("SQLite migration baseline", () => {
       campaignIndexColumns.map((column) => column.name),
       ["operation_id", "created_at"],
     );
-    const preservedNegotiation = sqlite
-      .prepare(
-        "SELECT campaign_id AS campaignId FROM negotiations WHERE id = ?",
-      )
-      .get("neg_migration") as { campaignId: string } | undefined;
-    assert.deepEqual(preservedNegotiation, { campaignId: "cmp_migration" });
+    const preservedRows = sqlite.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM carriers WHERE id = 'car_migration') AS carriers,
+        (SELECT COUNT(*) FROM operations WHERE id = 'op_migration' AND selected_carrier_id = 'car_migration') AS operations,
+        (SELECT COUNT(*) FROM campaigns WHERE id = 'cmp_migration') AS campaigns,
+        (SELECT COUNT(*) FROM negotiations WHERE id = 'neg_migration') AS negotiations,
+        (SELECT COUNT(*) FROM quotes WHERE id = 'quo_migration') AS quotes,
+        (SELECT COUNT(*) FROM commitments WHERE id = 'com_migration') AS commitments
+    `).get();
+    assert.deepEqual(preservedRows, {
+      carriers: 1,
+      operations: 1,
+      campaigns: 1,
+      negotiations: 1,
+      quotes: 1,
+      commitments: 1,
+    });
     assert.deepEqual(sqlite.pragma("foreign_key_check"), []);
     const tracked = sqlite
       .prepare("SELECT COUNT(*) AS count FROM __drizzle_migrations")
@@ -95,10 +128,10 @@ describe("SQLite migration baseline", () => {
     sqlite.close();
   });
 
-  it("upgrades the current main database to Voice without losing calls", () => {
+  it("upgrades pre-Voice main through 0005 without losing calls", () => {
     const sqlite = new Database(":memory:");
     const migrations = readMigrationFiles({ migrationsFolder });
-    assert.equal(migrations.length, 5);
+    assert.equal(migrations.length, 6);
     for (const migration of migrations.slice(0, 4)) {
       for (const statement of migration.sql) {
         if (statement.trim()) sqlite.exec(statement);
@@ -136,16 +169,38 @@ describe("SQLite migration baseline", () => {
     for (const statement of migrations[4]!.sql) {
       if (statement.trim()) sqlite.exec(statement);
     }
+    sqlite.prepare(`
+      INSERT INTO carriers (
+        id, name, dispatcher_name, phone, created_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run(
+      "car_upgrade",
+      "Upgrade carrier",
+      "Upgrade dispatcher",
+      "+525500000001",
+      "2026-08-29T12:02:00.000Z",
+    );
+    sqlite
+      .prepare("UPDATE calls SET carrier_id = ? WHERE id = ?")
+      .run("car_upgrade", "call_upgrade");
+    for (const statement of migrations[5]!.sql) {
+      if (statement.trim()) sqlite.exec(statement);
+    }
 
     const call = sqlite
-      .prepare("SELECT id, actor_type, twilio_stream_sid, recording_sid FROM calls WHERE id = ?")
+      .prepare("SELECT id, carrier_id, actor_type, twilio_stream_sid, recording_sid FROM calls WHERE id = ?")
       .get("call_upgrade") as Record<string, unknown>;
     assert.deepEqual(call, {
       id: "call_upgrade",
+      carrier_id: "car_upgrade",
       actor_type: "CARRIER",
       twilio_stream_sid: null,
       recording_sid: null,
     });
+    assert.deepEqual(
+      sqlite.prepare("SELECT id FROM carriers WHERE id = ?").get("car_upgrade"),
+      { id: "car_upgrade" },
+    );
     const operationIdColumn = sqlite
       .prepare("PRAGMA table_info(calls)")
       .all()

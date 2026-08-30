@@ -53,6 +53,48 @@ function createDatabase() {
 }
 
 describe("DrizzleCallRepository", () => {
+  it("reads and updates a telephony call before operation context exists", async () => {
+    const { sqlite, database } = createDatabase();
+    const repository = new DrizzleCallRepository(database);
+    const call: Call = {
+      id: "call_unbound",
+      operationId: null,
+      carrierId: null,
+      negotiationId: null,
+      actorType: "INTERNAL_OPERATOR",
+      twilioCallSid: "CA_UNBOUND",
+      twilioStreamSid: null,
+      recordingSid: null,
+      recordingStatus: null,
+      recordingUrl: null,
+      recordingDurationSeconds: null,
+      realtimeSessionId: null,
+      direction: "INBOUND",
+      purpose: "OPERATIONS",
+      status: "QUEUED",
+      fromNumber: "+525500009999",
+      toNumber: "+525500000000",
+      transcript: null,
+      brief: null,
+      startedAt: null,
+      endedAt: null,
+      createdAt: "2026-08-29T12:00:00.000Z",
+    };
+
+    try {
+      await repository.insert(call);
+      const transition = await repository.transitionStatusByProviderCallId(
+        "CA_UNBOUND",
+        { expectedStatus: "QUEUED", status: "RINGING" },
+      );
+      assert.equal(transition?.call.operationId, null);
+      assert.equal(transition?.call.status, "RINGING");
+      assert.equal((await repository.findByProviderCallId("CA_UNBOUND"))?.id, call.id);
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("persists the call, transcript, brief and lifecycle correlation", async () => {
     const { sqlite, database } = createDatabase();
     const repository = new DrizzleCallRepository(database);

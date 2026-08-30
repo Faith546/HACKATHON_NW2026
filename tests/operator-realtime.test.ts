@@ -9,6 +9,46 @@ import { ApiError } from "../src/shared/http/api-error";
 import { InMemoryJobQueue } from "../src/shared/queue/in-memory-job-queue";
 
 describe("Authorized operator Realtime flow", () => {
+  it("rejects a carrier Realtime session without business context", async () => {
+    const calls = new CallsService({
+      repository: new InMemoryCallRepository(),
+      queue: new InMemoryJobQueue(),
+      telephonyGateway: {
+        startOutboundCall: async () => ({ providerCallId: "CA_UNUSED" }),
+      },
+      contextResolver: {
+        resolve: async () => ({ toNumber: "+525500000001" }),
+      },
+      createId: () => "call_carrier_unbound",
+    });
+    await calls.createOrGetInbound({
+      operationId: null,
+      carrierId: "car_unbound",
+      actorType: "CARRIER",
+      providerCallId: "CA_CARRIER_UNBOUND",
+      fromNumber: "+525500000001",
+      toNumber: "+525500000000",
+      purpose: "QUOTE",
+    });
+    const realtime = new RealtimeService({
+      repository: new InMemoryRealtimeSessionRepository(),
+      callsService: calls,
+      voiceCore: {} as VoiceCorePort,
+    });
+    await assert.rejects(
+      () =>
+        realtime.create({
+          callId: "call_carrier_unbound",
+          actorType: "CARRIER",
+          operationId: null,
+          mode: "QUOTE",
+        }),
+      (error: unknown) =>
+        error instanceof ApiError &&
+        error.code === "INBOUND_CONTEXT_UNRESOLVED",
+    );
+  });
+
   it("requires explicit speech and switches to DELIVERY only after exact resolution", async () => {
     const calls = new CallsService({
       repository: new InMemoryCallRepository(),

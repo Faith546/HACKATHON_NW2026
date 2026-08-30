@@ -117,6 +117,14 @@ export class RealtimeService {
 
   async create(input: CreateRealtimeSessionInput): Promise<RealtimeSession> {
     const call = await this.dependencies.callsService.getById(input.callId);
+    if (!call.operationId && call.actorType !== "INTERNAL_OPERATOR") {
+      throw new ApiError(
+        422,
+        "INBOUND_CONTEXT_UNRESOLVED",
+        "No hay una operación activa para la llamada entrante.",
+        { callId: call.id, carrierId: call.carrierId },
+      );
+    }
     this.assertMatchingContext("operationId", input.operationId, call.operationId);
     this.assertMatchingContext("carrierId", input.carrierId, call.carrierId);
     this.assertMatchingContext(
