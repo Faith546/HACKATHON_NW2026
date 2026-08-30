@@ -239,6 +239,42 @@ describe("Market Engine OpenAPI contract", () => {
     );
   });
 
+  it("keeps quote revisions, deduplicates repeats and selects only the latest offer", async () => {
+    const context = await createMarketContext(baseUrl, [80, 70, 60]);
+    const negotiationId = context.negotiationIds[0];
+    const original = await recordQuote(baseUrl, negotiationId, offer(8_500));
+    const revised = await recordQuote(baseUrl, negotiationId, offer(8_000));
+    const repeated = await recordQuote(baseUrl, negotiationId, offer(8_000));
+    const other = await recordQuote(
+      baseUrl,
+      context.negotiationIds[1],
+      offer(8_100),
+    );
+    await campaignsService.reportNoAnswer(context.negotiationIds[2]);
+
+    assert.equal(original.revision, 1);
+    assert.equal(revised.revision, 2);
+    assert.equal(repeated.id, revised.id);
+    assert.equal(
+      db
+        .select()
+        .from(quoteTable)
+        .where(eq(quoteTable.negotiationId, negotiationId))
+        .all().length,
+      2,
+    );
+
+    const response = await fetch(
+      `${baseUrl}/api/v1/operations/${context.operation.id}/market/selection`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+    );
+    const selection = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(selection));
+    assert.equal(selection.winningQuoteId, revised.id);
+    assert.deepEqual(selection.comparedQuoteIds, [revised.id, other.id]);
+    assert.ok(!selection.comparedQuoteIds.includes(original.id));
+  });
+
   it("implements BALANCED_SCORE with a documented deterministic formula", async () => {
     const context = await createMarketContext(baseUrl, [0, 100, 50]);
     const quotes = await Promise.all([

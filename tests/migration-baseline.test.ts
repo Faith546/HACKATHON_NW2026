@@ -128,10 +128,10 @@ describe("SQLite migration baseline", () => {
     sqlite.close();
   });
 
-  it("upgrades pre-Voice main through 0005 without losing calls", () => {
+  it("upgrades pre-Voice main through the latest migration without losing calls", () => {
     const sqlite = new Database(":memory:");
     const migrations = readMigrationFiles({ migrationsFolder });
-    assert.equal(migrations.length, 6);
+    assert.equal(migrations.length, 7);
     for (const migration of migrations.slice(0, 4)) {
       for (const statement of migration.sql) {
         if (statement.trim()) sqlite.exec(statement);

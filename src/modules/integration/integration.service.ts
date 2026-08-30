@@ -1,6 +1,7 @@
 import { db } from "../../db";
 import {
   auditEvents,
+  calls,
   campaigns,
   carriers,
   negotiations,
@@ -904,11 +905,42 @@ function carrierUpdatesForOperation(operationId: string) {
     .where(eq(negotiations.campaignId, campaign.id))
     .orderBy(negotiations.createdAt, negotiations.id)
     .all()
-    .map(({ negotiation, carrierName, dispatcherName }) => ({
-      ...toNegotiationResponse(negotiation),
-      carrierName,
-      dispatcherName,
-    }));
+    .map(({ negotiation, carrierName, dispatcherName }) => {
+      const latestCall = db
+        .select({
+          id: calls.id,
+          status: calls.status,
+          briefJson: calls.briefJson,
+          endedAt: calls.endedAt,
+        })
+        .from(calls)
+        .where(eq(calls.negotiationId, negotiation.id))
+        .orderBy(desc(calls.createdAt), desc(calls.id))
+        .limit(1)
+        .get();
+      return {
+        ...toNegotiationResponse(negotiation),
+        carrierName,
+        dispatcherName,
+        latestCall: latestCall
+          ? {
+              id: latestCall.id,
+              status: latestCall.status,
+              endedAt: latestCall.endedAt,
+              brief: parseStoredCallBrief(latestCall.briefJson),
+            }
+          : null,
+      };
+    });
+}
+
+function parseStoredCallBrief(value: string | null): unknown {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function assertEquivalentOperation(

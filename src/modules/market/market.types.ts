@@ -74,6 +74,7 @@ export function toQuoteResponse(
   return {
     id: quote.id,
     negotiationId: quote.negotiationId,
+    revision: quote.revision,
     carrierId: quote.carrierId,
     totalPrice: quote.totalPriceCents / 100,
     currency: quote.currency,

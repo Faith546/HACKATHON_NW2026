@@ -259,6 +259,7 @@ export class DrizzleVoiceCoreAdapter implements VoiceCorePort {
               "CALLING",
               "NEGOTIATING",
               "NO_ANSWER",
+              "QUOTED",
             ]),
             and(
               eq(negotiations.status, "SELECTED"),

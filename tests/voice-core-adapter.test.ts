@@ -132,6 +132,28 @@ describe("DrizzleVoiceCoreAdapter", () => {
     }
   });
 
+  it("lets a quoted carrier call back with a revised offer while sourcing remains open", async () => {
+    const { sqlite, adapter } = fixture();
+    try {
+      sqlite.prepare("UPDATE negotiations SET status = 'QUOTED'").run();
+      assert.deepEqual(
+        await adapter.resolveInboundCallContext({
+          fromNumber: "+525500000001",
+          toNumber: "+525500000002",
+        }),
+        {
+          operationId: "op_1",
+          carrierId: "car_1",
+          negotiationId: "neg_1",
+          actorType: "CARRIER",
+          purpose: "QUOTE",
+        },
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
   it("rejects a known carrier without an active operation context", async () => {
     const { sqlite, adapter } = fixture();
     try {

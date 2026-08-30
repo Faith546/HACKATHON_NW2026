@@ -254,10 +254,15 @@ export const quotes = sqliteTable(
       .notNull()
       .references(() => mandates.id),
     validUntil: text("valid_until").notNull(),
+    revision: integer("revision").notNull().default(1),
     createdAt: text("created_at").notNull().$defaultFn(nowIso),
   },
   (table) => [
-    uniqueIndex("uq_quotes_negotiation").on(table.negotiationId),
+    uniqueIndex("uq_quotes_negotiation_revision").on(
+      table.negotiationId,
+      table.revision,
+    ),
+    index("idx_quotes_negotiation").on(table.negotiationId),
     check("ck_quotes_total_price", sql`${table.totalPriceCents} > 0`),
     check("ck_quotes_valid", sql`${table.valid} IN (0, 1)`),
     index("idx_quotes_operation_valid_price").on(

@@ -38,6 +38,7 @@ const offerableNegotiationStatuses = new Set([
   "PENDING",
   "CALLING",
   "NEGOTIATING",
+  "QUOTED",
 ]);
 
 interface InternalEvaluation {
@@ -220,6 +221,23 @@ export class MarketRepository {
 
       const evaluation = this.evaluateAgainstMandate(mandate, input);
       const occurredAt = this.now().toISOString();
+      const latestQuote = tx
+        .select()
+        .from(quotes)
+        .where(eq(quotes.negotiationId, negotiationId))
+        .orderBy(desc(quotes.revision))
+        .limit(1)
+        .get();
+      if (
+        latestQuote &&
+        latestQuote.totalPriceCents === evaluation.totalPriceCents &&
+        latestQuote.currency === input.currency &&
+        latestQuote.pickupDate === input.pickupDate &&
+        latestQuote.notes === (input.notes ?? null) &&
+        latestQuote.mandateId === mandate.id
+      ) {
+        return latestQuote;
+      }
       const quote = tx
         .insert(quotes)
         .values({
@@ -240,6 +258,7 @@ export class MarketRepository {
           invalidReason: evaluation.invalidReason,
           mandateId: mandate.id,
           validUntil: input.validUntil,
+          revision: (latestQuote?.revision ?? 0) + 1,
           createdAt: occurredAt,
         })
         .returning()
@@ -430,7 +449,7 @@ export class MarketRepository {
         );
       }
 
-      const allQuotes = tx
+      const quoteHistory = tx
         .select({ quote: quotes, carrier: carriers })
         .from(quotes)
         .innerJoin(carriers, eq(quotes.carrierId, carriers.id))
@@ -439,7 +458,14 @@ export class MarketRepository {
           eq(quotes.negotiationId, negotiations.id),
         )
         .where(eq(negotiations.campaignId, campaign.id))
+        .orderBy(desc(quotes.revision))
         .all();
+      const currentNegotiations = new Set<string>();
+      const allQuotes = quoteHistory.filter(({ quote }) => {
+        if (currentNegotiations.has(quote.negotiationId)) return false;
+        currentNegotiations.add(quote.negotiationId);
+        return true;
+      });
       const selectedAt = this.now().toISOString();
       const excludedQuotes: Array<{ quoteId: string; reasons: string[] }> = [];
       const eligible: RankedQuote[] = [];

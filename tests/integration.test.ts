@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../src/db";
 import {
   auditEvents,
+  calls,
   campaigns,
   carriers,
   mandates,
@@ -188,6 +189,27 @@ describe("IntegrationService facade", () => {
       carrierId,
       status: "NO_ANSWER",
     }).run();
+    const callId = `call_container_${randomUUID()}`;
+    db.insert(calls).values({
+      id: callId,
+      operationId: operation.id,
+      carrierId,
+      negotiationId,
+      actorType: "CARRIER",
+      direction: "OUTBOUND",
+      purpose: "QUOTE",
+      status: "COMPLETED",
+      briefJson: JSON.stringify({
+        callId,
+        summary: "Ana pidió que volvamos a llamar por la tarde.",
+        outcome: "NO_AGREEMENT",
+        mentions: [],
+        objections: ["Necesita confirmar disponibilidad"],
+        actions: [],
+        nextSteps: ["Volver a llamar por la tarde"],
+        generatedAt: "2026-08-30T12:00:00.000Z",
+      }),
+    }).run();
     const voiceIntegration = createIntegrationService({
       callsService: {
         bindOperationContext: async () => undefined,
@@ -218,12 +240,28 @@ describe("IntegrationService facade", () => {
           carrierName: update.carrierName,
           dispatcherName: update.dispatcherName,
           status: update.status,
+          latestCall: update.latestCall,
         })),
         [
           {
             carrierName: "Transportes Norte",
             dispatcherName: "Ana",
             status: "NO_ANSWER",
+            latestCall: {
+              id: callId,
+              status: "COMPLETED",
+              endedAt: null,
+              brief: {
+                callId,
+                summary: "Ana pidió que volvamos a llamar por la tarde.",
+                outcome: "NO_AGREEMENT",
+                mentions: [],
+                objections: ["Necesita confirmar disponibilidad"],
+                actions: [],
+                nextSteps: ["Volver a llamar por la tarde"],
+                generatedAt: "2026-08-30T12:00:00.000Z",
+              },
+            },
           },
         ],
       );
@@ -252,6 +290,7 @@ describe("IntegrationService facade", () => {
       db.delete(auditEvents)
         .where(eq(auditEvents.operationId, operation.id))
         .run();
+      db.delete(calls).where(eq(calls.id, callId)).run();
       db.delete(negotiations).where(eq(negotiations.id, negotiationId)).run();
       db.delete(campaigns).where(eq(campaigns.id, campaignId)).run();
       db.delete(mandates).where(eq(mandates.operationId, operation.id)).run();

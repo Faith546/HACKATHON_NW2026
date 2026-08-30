@@ -1428,13 +1428,16 @@ components:
       allOf:
         - $ref: "#/components/schemas/RecordQuoteRequest"
         - type: object
-          required: [id, negotiationId, carrierId, totalPrice, valid, mandateId, createdAt]
+          required: [id, negotiationId, revision, carrierId, totalPrice, valid, mandateId, createdAt]
           properties:
             id:
               type: string
               example: quo_01JABC123
             negotiationId:
               type: string
+            revision:
+              type: integer
+              minimum: 1
             carrierId:
               type: string
             totalPrice:
