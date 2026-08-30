@@ -17,6 +17,7 @@ describe("RealtimeService", () => {
       contextResolver: { resolve: async () => ({ toNumber: "+525500000001" }) },
       telephonyGateway: {
         startOutboundCall: async () => ({ providerCallId: "CA_REALTIME" }),
+        startRecording: async () => {},
       },
       createId: () => "call_realtime",
     });

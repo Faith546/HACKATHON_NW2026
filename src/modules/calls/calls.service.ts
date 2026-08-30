@@ -218,6 +218,19 @@ export class CallsService implements CallScheduler {
     return this.dependencies.repository.setProviderCallId(callId, providerCallId);
   }
 
+  async startRecording(callId: string): Promise<void> {
+    const call = await this.getById(callId);
+    if (!call.twilioCallSid) {
+      throw new ApiError(
+        422,
+        "CALL_PROVIDER_ID_MISSING",
+        "La llamada no tiene un CallSid asociado para grabar.",
+        { callId },
+      );
+    }
+    await this.dependencies.telephonyGateway.startRecording(call.twilioCallSid);
+  }
+
   async createOrGetInbound(input: CreateInboundCallInput): Promise<Call> {
     const providerCallId = requiredIdentifier(
       input.providerCallId,
