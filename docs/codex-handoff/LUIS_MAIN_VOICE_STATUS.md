@@ -28,6 +28,7 @@
 
 - `UNIQUE(negotiation_id)` y el estado terminal `QUOTED` siguen impidiendo revisiones 8,500 → 10,000.
 - Backend debe definir contrato/schema de quote candidate/revision y dedup persistente. Voice no creó Round2, ranking, top2 ni winner.
+- `JOINT_BACKEND`: después del último fetch apareció `origin/feat/business-rules` (`c7a14e1`) con su propia migración `0002` y cambios en `schema.ts`, Market y `twilio-media.bridge.ts`. No implementa revisions, pero antes de integrar ambas branches el owner de backend debe reconciliar/renumerar las migraciones y resolver esos archivos compartidos; esta tarea no mezcló ni sobrescribió esa branch.
 
 ## BLOCKED_BY_AGENTS
 

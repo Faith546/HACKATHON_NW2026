@@ -6,6 +6,7 @@ No contiene secretos. Confirmar cada punto en Railway antes de una llamada real.
 - [ ] Root Directory apunta a la raíz de `HACKATHON_NW2026` (donde vive `package.json`).
 - [ ] Start Command: `npm start` (`tsx src/server.ts`).
 - [ ] Migration/Pre-deploy Command: `npm run db:migrate`.
+- [ ] Antes del merge, resolver `JOINT_BACKEND`: esta branch y `origin/feat/business-rules` contienen migraciones `0002` distintas; no desplegar ambas sin reconciliarlas.
 - [ ] `HOST=0.0.0.0`; el código aún usa `127.0.0.1` como default local.
 - [ ] `PORT` lo inyecta Railway; el default local es `3000`.
 - [ ] Existe volumen persistente para SQLite y `SQLITE_PATH` apunta dentro de ese volumen.
