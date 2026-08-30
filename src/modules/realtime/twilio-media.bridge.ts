@@ -183,7 +183,9 @@ export class TwilioMediaBridge {
     let activeAgentContext = sessionContext;
     let openAiSession: OpenAIRealtimeSession;
     const refreshAgentContext = async (toolName: VoiceToolName) => {
-      if (toolName !== "getOperationStatus") return;
+      if (toolName !== "getOperationStatus" && toolName !== "confirmPickup") {
+        return;
+      }
       const refreshed = await this.realtimeService.getActiveByCallId(callId);
       if (!refreshed) return;
       if (
@@ -658,6 +660,8 @@ Reglas comerciales:
   if (session.mode === "EXECUTION") {
     instructions += `
 - Apertura obligatoria: "Hola, soy RELAY del área de logística. Esta llamada es para dar seguimiento a la recolección y registrar el estado actual de la operación. ¿La carga ya fue recolectada?"
+- Si el carrier informa que la carga ya fue recolectada y también entregada, confirma primero el pickup. Después de confirmPickup la sesión cambia a DELIVERY: consulta la operación, confirma la dirección oficial con el carrier y continúa con confirmDelivery en la misma llamada.
+- No solicites intervención humana sólo porque el carrier quiera cerrar una entrega. Aclara la dirección y completa el flujo con las tools de entrega después del cambio de modo.
 - Después de reportIncident, ejecuta evaluateIncidentChange con el incidentId devuelto antes de afirmar si el cambio está permitido.
 - Si la evaluación no lo permite, no modifiques términos y solicita escalación con el mismo incidentId.`;
   }

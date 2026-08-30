@@ -328,7 +328,7 @@ export class RealtimeService {
       });
     if (!mutatingVoiceTools.has(name)) {
       const result = await execute();
-      await this.synchronizeOperatorContext(session, name, result);
+      await this.synchronizeSessionContext(session, name, result);
       return result;
     }
 
@@ -342,7 +342,7 @@ export class RealtimeService {
     executions.set(key, execution);
     try {
       const result = await execution;
-      await this.synchronizeOperatorContext(session, name, result);
+      await this.synchronizeSessionContext(session, name, result);
       return result;
     } catch (error) {
       if (executions.get(key) === execution) executions.delete(key);
@@ -429,11 +429,25 @@ export class RealtimeService {
     return session;
   }
 
-  private async synchronizeOperatorContext(
+  private async synchronizeSessionContext(
     session: RealtimeSession,
     name: VoiceToolName,
     _result: unknown,
   ): Promise<void> {
+    if (name === "confirmPickup" && session.operationId) {
+      await this.dependencies.callsService.bindOperationContext(
+        session.callId,
+        {
+          operationId: session.operationId,
+          purpose: "DELIVERY",
+        },
+      );
+      session.mode = "DELIVERY";
+      session.allowedTools = [...toolsByMode.DELIVERY];
+      await this.dependencies.repository.save(session);
+      return;
+    }
+
     if (
       session.actorType !== "INTERNAL_OPERATOR" ||
       (name !== "createOperation" && name !== "getOperationStatus")

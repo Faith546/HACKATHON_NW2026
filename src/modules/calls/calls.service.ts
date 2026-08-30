@@ -58,7 +58,7 @@ interface CampaignDispatchState {
   pumping: boolean;
 }
 
-const busyCommitRetryDelayMs = 3 * 60 * 1_000;
+const busyCommitRetryDelayMs = 60 * 1_000;
 
 export class CallsService implements CallScheduler {
   private readonly now: () => Date;
