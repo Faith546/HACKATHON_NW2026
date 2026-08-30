@@ -1,0 +1,27 @@
+{
+  "name": "relay-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts",
+    "recording:download": "tsx scripts/download-recording.ts"
+  },
+  "dependencies": {
+    "@fastify/formbody": "^9.0.0",
+    "@fastify/websocket": "^11.3.0",
+    "@openai/agents": "^0.17.0",
+    "@openai/agents-extensions": "^0.17.0",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.12.1",
+    "twilio": "^6.1.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}
