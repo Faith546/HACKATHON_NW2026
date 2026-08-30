@@ -12,6 +12,7 @@ import {
 import type * as databaseSchema from "../../db/schema";
 import { ApiError } from "../../shared/http/api-error";
 import type {
+  ConfirmDeliveryInput,
   ConfirmExecutionEventInput,
   OperationExecutionResponse,
 } from "./execution.types";
@@ -130,7 +131,7 @@ export class ExecutionRepository {
 
   confirmDelivery(
     operationId: string,
-    input: ConfirmExecutionEventInput,
+    input: ConfirmDeliveryInput,
     actorId?: string,
     actorType: "DRIVER" | "INTERNAL_OPERATOR" = "DRIVER",
   ): OperationExecutionResponse {
@@ -154,6 +155,23 @@ export class ExecutionRepository {
           "INVALID_STATE_TRANSITION",
           `La operación no puede confirmar delivery desde ${operation.status}.`,
           { operationId, status: operation.status },
+        );
+      }
+
+      if (
+        input.deliveryAddress !== undefined &&
+        normalizeDeliveryAddress(input.deliveryAddress) !==
+        normalizeDeliveryAddress(operation.destination)
+      ) {
+        throw new ApiError(
+          409,
+          "DELIVERY_ADDRESS_MISMATCH",
+          "La dirección confirmada no coincide con el destino guardado de la operación.",
+          {
+            operationId,
+            deliveryAddress: input.deliveryAddress,
+            expectedDestination: operation.destination,
+          },
         );
       }
 
@@ -206,6 +224,7 @@ export class ExecutionRepository {
           payloadJson: JSON.stringify({
             occurredAt: input.occurredAt,
             confirmedBy: input.confirmedBy,
+            deliveryAddress: input.deliveryAddress ?? operation.destination,
             notes: input.notes ?? null,
             previousOperationStatus: operation.status,
             operationTransitions: ["DELIVERED", "COMPLETED"],
@@ -219,6 +238,16 @@ export class ExecutionRepository {
       return toOperationResponse(updatedOperation, mandate);
     });
   }
+}
+
+function normalizeDeliveryAddress(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es-MX")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 type Transaction = Parameters<

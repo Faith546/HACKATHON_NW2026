@@ -13,6 +13,14 @@ export type ConfirmExecutionEventInput = z.infer<
   typeof ConfirmExecutionEventSchema
 >;
 
+export const ConfirmDeliverySchema = ConfirmExecutionEventSchema.extend({
+  deliveryAddress: requiredText,
+});
+
+export type ConfirmDeliveryInput = ConfirmExecutionEventInput & {
+  deliveryAddress?: string;
+};
+
 export interface OperationMandateResponse {
   id: string;
   operationId: string;

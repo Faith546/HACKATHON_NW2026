@@ -563,9 +563,12 @@ function assertExplicitVoiceAuthorization(
       );
   } else if (name === "confirmDelivery") {
     accepted =
-      /\b(entreg\w*|recibid\w*|ya llego|llego bien|entrega completada)\b/.test(
+      (/\b(entreg\w*|recibid\w*|ya llego|llego bien|entrega completada)\b/.test(
         text,
-      ) &&
+      ) ||
+        /\b(si|claro|correcto|exacto|confirmo|de acuerdo|esta bien|ok|okay)\b/.test(
+          text,
+        )) &&
       !/\b(no se entreg\w*|no ha lleg\w*|aun no|todavia no|deberia|probablemente|tal vez|quiza|manana|va a llegar)\b/.test(
         text,
       );

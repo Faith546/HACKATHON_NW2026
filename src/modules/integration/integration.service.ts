@@ -35,7 +35,10 @@ import {
   executionService as defaultExecutionService,
   type ExecutionService,
 } from "../execution/execution.service";
-import type { ConfirmExecutionEventInput } from "../execution/execution.types";
+import type {
+  ConfirmDeliveryInput,
+  ConfirmExecutionEventInput,
+} from "../execution/execution.types";
 import {
   incidentsService as defaultIncidentsService,
   type IncidentsService,
@@ -208,7 +211,7 @@ export class IntegrationService {
 
   confirmDelivery(
     operationId: string,
-    input: ConfirmExecutionEventInput,
+    input: ConfirmDeliveryInput,
     actorId?: string,
   ) {
     return this.executionService.confirmDelivery(operationId, input, actorId);
@@ -453,7 +456,7 @@ export class IntegrationService {
         return this.executionService.confirmDelivery(
           requireOperationId(input.context),
           {
-            ...(args as Omit<ConfirmExecutionEventInput, "callId">),
+            ...(args as Omit<ConfirmDeliveryInput, "callId">),
             callId: input.context.callId,
           },
           actorId,

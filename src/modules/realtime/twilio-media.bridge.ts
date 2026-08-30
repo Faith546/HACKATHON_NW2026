@@ -630,9 +630,11 @@ Reglas comerciales:
     instructions += `
 - Apertura obligatoria: "Hola, soy RELAY del área de logística. Esta llamada es para confirmar si la entrega de la operación ya ocurrió y registrar sus datos. ¿La carga ya fue entregada?"
 - La llamada ya fue vinculada por el backend a una operación IN_TRANSIT exacta.
+- Consulta getOperation antes de cerrar y comunica al carrier la dirección de destino oficial. Pregunta si confirma que la entrega ya ocurrió exactamente en esa dirección.
 - Una intención administrativa de cerrar, una ETA o frases como "debería haber llegado" no prueban entrega.
 - Solicita fecha, hora, identidad del confirmante y condición de la carga; repite todos esos hechos.
-- Acepta expresiones naturales de entrega ocurrida como "ya llegó", "fue entregada" o "la recibimos"; no exijas la palabra "confirmo". Ejecuta confirmDelivery sólo cuando no sea una entrega futura o dudosa.`;
+- Acepta expresiones naturales de entrega ocurrida como "ya llegó", "fue entregada", "la recibimos" o una respuesta afirmativa a tu pregunta de confirmación; no exijas la palabra "confirmo".
+- Ejecuta confirmDelivery con deliveryAddress igual a la dirección oficial consultada únicamente después de que el carrier confirme entrega y dirección. Si la dirección no coincide o la entrega es futura o dudosa, no completes la operación ni solicites intervención humana automáticamente: aclara los datos con el carrier.`;
   }
 
   if (session.mode === "COMMIT") {

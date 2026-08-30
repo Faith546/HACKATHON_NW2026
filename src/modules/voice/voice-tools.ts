@@ -5,7 +5,10 @@ import {
   VerbalAgreementSchema,
 } from "../commitments/commitments.types";
 import { RequestEscalationSchema } from "../escalations/escalations.types";
-import { ConfirmExecutionEventSchema } from "../execution/execution.types";
+import {
+  ConfirmDeliverySchema,
+  ConfirmExecutionEventSchema,
+} from "../execution/execution.types";
 import {
   EvaluateChangeSchema,
   ReportIncidentSchema,
@@ -92,7 +95,7 @@ export const voiceToolSchemas = {
     requestedHumanPhone: true,
   }).strict(),
   confirmPickup: ConfirmExecutionEventSchema.omit({ callId: true }).strict(),
-  confirmDelivery: ConfirmExecutionEventSchema.omit({ callId: true }).strict(),
+  confirmDelivery: ConfirmDeliverySchema.omit({ callId: true }).strict(),
   saveCallBrief: z.object({
     summary: nonEmptyText,
     outcome: z.enum([
@@ -152,7 +155,7 @@ export const voiceToolDescriptions: Record<VoiceToolName, string> = {
   evaluateIncidentChange: "Evalúa el cambio propuesto contra el mandato activo.",
   requestEscalation: "Solicita que un humano se una a la llamada activa.",
   confirmPickup: "Confirma el pickup con evidencia de la llamada.",
-  confirmDelivery: "Confirma la entrega con evidencia de la llamada.",
+  confirmDelivery: "Confirma la entrega sólo cuando la dirección indicada por el carrier coincide con el destino oficial de la operación.",
   saveCallBrief: "Guarda el resumen estructurado de la llamada actual.",
 };
 

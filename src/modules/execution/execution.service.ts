@@ -5,6 +5,7 @@ import {
   type ExecutionRepositoryOptions,
 } from "./execution.repository";
 import type {
+  ConfirmDeliveryInput,
   ConfirmExecutionEventInput,
   OperationExecutionResponse,
 } from "./execution.types";
@@ -28,7 +29,7 @@ export class ExecutionService {
 
   confirmDelivery(
     operationId: string,
-    input: ConfirmExecutionEventInput,
+    input: ConfirmDeliveryInput,
     actorId?: string,
     actorType: "DRIVER" | "INTERNAL_OPERATOR" = "DRIVER",
   ): OperationExecutionResponse {
