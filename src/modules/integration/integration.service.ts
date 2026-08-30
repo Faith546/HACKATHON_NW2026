@@ -498,17 +498,31 @@ export class IntegrationService {
           eq(auditEvents.eventType, "OPERATION_CREATED"),
           like(auditEvents.actorId, "voice:%"),
         ),
-      )
+    )
       .where(inArray(operations.status, ["CREATED", "SOURCING"]))
       .all();
     for (const operation of operationRows) {
-      if (operation.status === "CREATED") {
-        await this.startAutomaticCampaign(
-          operation.id,
-          "system:autonomous-recovery",
-        );
-      } else {
-        await this.advanceAutonomousFlow(operation.id);
+      try {
+        if (operation.status === "CREATED") {
+          await this.startAutomaticCampaign(
+            operation.id,
+            "system:autonomous-recovery",
+          );
+        } else {
+          await this.advanceAutonomousFlow(operation.id);
+        }
+      } catch (error) {
+        if (
+          error instanceof ApiError &&
+          error.code ===
+            "AUTONOMOUS_CAMPAIGN_REQUIRES_EXACTLY_THREE_CARRIERS"
+        ) {
+          process.stderr.write(
+            `[AUTONOMOUS_RECOVERY_SKIPPED] operationId=${operation.id} code=${error.code}\n`,
+          );
+          continue;
+        }
+        throw error;
       }
     }
   }
